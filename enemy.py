@@ -1,0 +1,94 @@
+import math
+import pygame
+from settings import ENEMY_SIZE, ENEMY_SPEED, ENEMY_HP, RED, WHITE
+from animation import Animation
+from asset_loader import load_image
+
+
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y, hp=None, speed=None, size=None, color=None, is_elite=False, sprite_name="enemy"):
+        super().__init__()
+        self.hp = hp if hp is not None else ENEMY_HP
+        self.max_hp = self.hp
+        self.speed = speed if speed is not None else ENEMY_SPEED
+        self.is_elite = is_elite
+        self.contact_damage = 1
+        size = size if size is not None else ENEMY_SIZE
+        color = color if color is not None else RED
+
+        self._base_color = color
+        self._size = size
+        self.flash_timer = 0.0
+
+        # DoT debuff
+        self.dot_timer = 0.0
+        self.dot_tick_timer = 0.0
+        self.dot_damage = 0
+
+        # Frostbite
+        self.frostbitten = False
+
+        # Base speed (for slow calculation)
+        self._base_speed = self.speed
+
+        # Animation
+        frames = load_image(sprite_name, color, size, animated=True)
+        self._anim = Animation(frames, frame_duration=0.15)
+        self._frames = frames  # keep ref for flash restore
+
+        self.image = self._anim.get_image()
+        self.rect = self.image.get_rect(topleft=(x, y))
+
+    def take_damage(self, damage):
+        self.hp -= damage
+        if self.hp > 0:
+            self.flash_timer = 0.1
+            # Flash: temporarily make all frames white
+            for f in self._frames:
+                f.fill(WHITE)
+        return self.hp <= 0
+
+    def apply_dot(self, duration, tick_interval, damage_per_tick):
+        self.dot_timer = duration
+        self.dot_tick_timer = 0.0
+        self.dot_damage = damage_per_tick
+
+    def apply_frostbite(self, slow_factor):
+        if not self.frostbitten:
+            self.frostbitten = True
+            self.speed *= slow_factor
+
+    def _update_flash(self, dt):
+        if self.flash_timer > 0:
+            self.flash_timer -= dt
+            if self.flash_timer <= 0:
+                # Restore original color to all frames
+                for f in self._frames:
+                    f.fill(self._base_color)
+
+    def _update_dot(self, dt):
+        if self.dot_timer > 0:
+            self.dot_timer -= dt
+            self.dot_tick_timer -= dt
+            if self.dot_tick_timer <= 0:
+                self.dot_tick_timer = 1.0
+                if self.take_damage(self.dot_damage):
+                    return True
+            if self.dot_timer <= 0:
+                self.dot_damage = 0
+        return False
+
+    def _move_toward(self, tx, ty, dt):
+        dx = tx - self.rect.centerx
+        dy = ty - self.rect.centery
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            self.rect.x += (dx / dist) * self.speed * dt
+            self.rect.y += (dy / dist) * self.speed * dt
+
+    def update(self, dt, player_rect):
+        self._update_flash(dt)
+        self._update_dot(dt)
+        self._anim.update(dt)
+        self.image = self._anim.get_image()
+        self._move_toward(player_rect.centerx, player_rect.centery, dt)
