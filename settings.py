@@ -3,6 +3,9 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 
+# Debug
+ENABLE_TEST_MODE = False  # 测试模式开关，True=开启，False=关闭
+
 # World (larger than screen for camera scrolling)
 MAP_WIDTH = 3000
 MAP_HEIGHT = 2250
@@ -60,8 +63,9 @@ HP_BONUS_PER_TIER = 1
 DAMAGE_BONUS_PER_TIER = 1  # 每50秒怪物伤害+1
 
 # Time-based Growth
-GROWTH_INTERVAL = 50     # 成长时间间隔（秒）
-XP_BONUS_PER_GROWTH = 1  # 每50秒经验获取+1
+GROWTH_INTERVAL = 25     # 怪物成长时间间隔（秒）
+XP_GROWTH_INTERVAL = 50  # 经验成长时间间隔（秒）
+XP_BONUS_PER_GROWTH = 0.5  # 每次经验成长+0.5
 
 # Elite Modifiers
 ELITE_HP_MULT = 2.0       # 精英怪血量倍率

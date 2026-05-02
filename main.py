@@ -11,7 +11,7 @@ from settings import (
     ELITE_CHANCE, ELITE_ACTIVATION, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
     CHARGER_HP, RANGER_HP, EXPLODER_HP,
     DIFFICULTY_INTERVAL, SPAWN_RATE_FACTOR, HP_BONUS_PER_TIER, DAMAGE_BONUS_PER_TIER,
-    GROWTH_INTERVAL, XP_BONUS_PER_GROWTH,
+    GROWTH_INTERVAL, XP_BONUS_PER_GROWTH, XP_GROWTH_INTERVAL,
     FIRE_INTERVAL, MAP_WIDTH, MAP_HEIGHT, XP_PER_ORB, XP_BASE, XP_DIFF_INCREMENT,
     PLAYER_SPEED, PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
     PICKUP_RANGE, CRIT_MULTIPLIER, FROSTBITE_SLOW,
@@ -43,9 +43,8 @@ from game import GameState, TestModeHandler
 def get_xp_for_level(level):
     """计算升到指定等级需要的累计经验值
 
-    1-10级: 增量+1 (每级所需: 6,7,8,9,10,11,12,13,14,15)
-    11-20级: 增量+5 (每级所需: 19,24,29,34,39,44,49,54,59,64)
-    21-30级: 增量+9 (每级所需: 73,82,91,100,109,118,127,136,145,154)
+    1-30级: 等差数列增长
+    30级后: 每级所需经验 × 1.1 (指数增长)
     """
     if level <= 1:
         return 0
@@ -54,14 +53,19 @@ def get_xp_for_level(level):
 
     total = XP_BASE  # 1→2级需要的经验
 
-    for l in range(3, level + 1):
-        block_idx = (l - 1) // 10
-        position = (l - 1) % 10
-        # 基础增量: 1, 每10级+4 (1→5→9→...)
-        base_increment = 1 + block_idx * XP_DIFF_INCREMENT
-        # 该级增量: 基础增量 + 位置 * 差值
-        increment = base_increment + position * XP_DIFF_INCREMENT
-        total += increment
+    for l in range(3, min(level + 1, 31)):  # 1-30级用等差数列
+        block_idx = (l - 2) // 10
+        position = (l - 2) % 10
+        level_increment = XP_BASE + block_idx * 10 + position * (XP_DIFF_INCREMENT - 3 + block_idx * XP_DIFF_INCREMENT)
+        total += level_increment
+
+    # 30级后用指数增长：每级所需经验 × 1.1
+    if level > 30:
+        # 30级升31级所需经验
+        last_needed = get_xp_for_level(30) - get_xp_for_level(29)
+        for l in range(31, level + 1):
+            last_needed = int(last_needed * 1.1)
+            total += last_needed
 
     return total
 
@@ -97,8 +101,11 @@ def _spawn_pos(camera):
 
 def _spawn_enemy(camera, elapsed_time, difficulty_level):
     x, y = _spawn_pos(camera)
-    hp_bonus = difficulty_level * HP_BONUS_PER_TIER
-    damage_bonus = int(elapsed_time / GROWTH_INTERVAL) * DAMAGE_BONUS_PER_TIER
+    # 每50秒触发一次成长，使用等差数列求和：+1, +2, +3... (1+2+...+n = n*(n+1)/2)
+    growth_count = int(elapsed_time / GROWTH_INTERVAL)
+    total_bonus = growth_count * (growth_count + 1) // 2  # 等差数列求和
+    hp_bonus = total_bonus
+    damage_bonus = total_bonus
     tier = int(elapsed_time / DIFFICULTY_INTERVAL)
 
     available = [(t, w) for t, w in _ENEMY_WEIGHTS.items()
@@ -140,17 +147,15 @@ def _kill_enemy(enemy, particles, orbs, explosions, score, audio=None, fps=60):
     for _ in range(count):
         particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
     if enemy.is_elite:
-        orb_count = 3
+        xp_gained = 3
     elif isinstance(enemy, Exploder):
         explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
-        orb_count = 1
+        xp_gained = 1
     else:
-        orb_count = 1
-    for _ in range(orb_count):
-        orbs.add(XpOrb(enemy.rect.centerx, enemy.rect.centery))
+        xp_gained = 1
     if audio:
         audio.play_enemy_death()
-    return score + 1
+    return score + 1, xp_gained
 
 
 def _handle_player_damage(player_hp, damage, invincible_timer, damage_taken):
@@ -224,19 +229,21 @@ def main():
             if game_state.menu:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     game_state.menu = False
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
-                    game_state.menu = False
-                    game_state.test_mode = True
+                # 测试模式已禁用
+                # if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
+                #     game_state.menu = False
+                #     game_state.test_mode = True
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     btn_rect = pygame.Rect(
                         (SCREEN_WIDTH - 220) // 2, SCREEN_HEIGHT - 100, 220, 50)
                     if btn_rect.collidepoint(event.pos):
                         game_state.menu = False
-                    test_btn_rect = pygame.Rect(
-                        (SCREEN_WIDTH - 220) // 2, SCREEN_HEIGHT - 160, 220, 45)
-                    if test_btn_rect.collidepoint(event.pos):
-                        game_state.menu = False
-                        game_state.test_mode = True
+                    # 测试按钮已禁用
+                    # test_btn_rect = pygame.Rect(
+                    #     (SCREEN_WIDTH - 220) // 2, SCREEN_HEIGHT - 160, 220, 45)
+                    # if test_btn_rect.collidepoint(event.pos):
+                    #     game_state.menu = False
+                    #     game_state.test_mode = True
                 continue
 
             # 游戏结束状态
@@ -295,40 +302,34 @@ def main():
                             game_state.paused = False
                             break
 
-            # 测试模式点击
-            if game_state.test_mode and event.type == pygame.MOUSEBUTTONDOWN:
-                # 技能面板点击
-                skill_rects = get_test_skill_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
-                for i, skill in enumerate(SKILL_POOL):
-                    if skill_rects[i].collidepoint(event.pos):
-                        test_handler.handle_skill_click(skill, game_state.stats, player, blade_mgr)
-                        game_state.acquired_skills.append(skill["name"])
-                        break
-
-                # 敌人生成点击
-                enemy_rects = get_test_enemy_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
-                for i, enemy_rect in enumerate(enemy_rects):
-                    if enemy_rect.collidepoint(event.pos) and i < len(_ENEMY_TYPES):
-                        test_handler.spawn_enemy_near_player(_ENEMY_TYPES[i], enemies, player)
-                        break
-
-                # 自动生成开关
-                auto_rect = get_test_auto_spawn_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
-                if auto_rect.collidepoint(event.pos):
-                    test_handler.toggle_auto_spawn()
-                    game_state.test_auto_spawn = test_handler.auto_spawn
+            # 测试模式点击已禁用
+            # if game_state.test_mode and event.type == pygame.MOUSEBUTTONDOWN:
+            #     # 技能面板点击
+            #     skill_rects = get_test_skill_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+            #     for i, skill in enumerate(SKILL_POOL):
+            #         if skill_rects[i].collidepoint(event.pos):
+            #             test_handler.handle_skill_click(skill, game_state.stats, player, blade_mgr)
+            #             game_state.acquired_skills.append(skill["name"])
+            #             break
+            #
+            #     # 敌人生成点击
+            #     enemy_rects = get_test_enemy_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+            #     for i, enemy_rect in enumerate(enemy_rects):
+            #         if enemy_rect.collidepoint(event.pos) and i < len(_ENEMY_TYPES):
+            #             test_handler.spawn_enemy_near_player(_ENEMY_TYPES[i], enemies, player)
+            #             break
+            #
+            #     # 自动生成开关
+            #     auto_rect = get_test_auto_spawn_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
+            #     if auto_rect.collidepoint(event.pos):
+            #         test_handler.toggle_auto_spawn()
+            #         game_state.test_auto_spawn = test_handler.auto_spawn
 
             # 常规按键
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if game_state.test_mode:
-                        # 退出测试模式，返回主菜单
-                        game_state.test_mode = False
-                        game_state.menu = True
-                        game_state.reset()
-                    else:
-                        pygame.quit()
-                        sys.exit()
+                    pygame.quit()
+                    sys.exit()
 
                 if event.key == pygame.K_F11:
                     fullscreen = not fullscreen
@@ -344,7 +345,8 @@ def main():
                 game_state.invincible_timer -= dt
 
             game_state.difficulty_level = int(game_state.elapsed_time / DIFFICULTY_INTERVAL)
-            current_spawn_interval = SPAWN_INTERVAL * (SPAWN_RATE_FACTOR ** game_state.difficulty_level)
+            # 刷新间隔随时间二次函数级减少
+            current_spawn_interval = SPAWN_INTERVAL / (1 + game_state.elapsed_time / 10 + (game_state.elapsed_time / 20) ** 2)
 
             keys = pygame.key.get_pressed()
             player.update(dt, keys)
@@ -401,7 +403,9 @@ def main():
                     if game_state.stats.get("has_frostbite", 0) > 0:
                         enemy.apply_frostbite(FROSTBITE_SLOW)
                     if dead:
-                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        score, xp = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        game_state.score = score
+                        game_state.experience += xp
                         enemy.kill()
 
             # 连锁闪电
@@ -410,7 +414,9 @@ def main():
                 for enemy, dmg, dead in lightning_hits:
                     damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
                     if dead:
-                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        score, xp = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        game_state.score = score
+                        game_state.experience += xp
                         enemy.kill()
 
             # 剧毒地雷
@@ -425,7 +431,9 @@ def main():
             # 持续伤害死亡检查
             for enemy in list(enemies):
                 if enemy.hp <= 0:
-                    game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                    score, xp = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                    game_state.score = score
+                    game_state.experience += xp
                     enemy.kill()
 
             # 射手开火
@@ -466,7 +474,9 @@ def main():
                         enemy.apply_frostbite(FROSTBITE_SLOW)
 
                     if dead:
-                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        score, xp = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        game_state.score = score
+                        game_state.experience += xp
                         enemy.kill()
                         # 复苏之风逻辑
                         if game_state.stats.get("regen_kills", 0) > 0:
@@ -512,16 +522,16 @@ def main():
                             game_state.player_hp, exp.damage, game_state.invincible_timer, game_state.stats["damage_taken"])
                 for enemy in list(enemies):
                     if enemy.hp <= 0:
-                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        score, xp = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
+                        game_state.score = score
+                        game_state.experience += xp
                         enemy.kill()
             explosions = [e for e in explosions if e.alive]
 
-            # 经验球
-            xp_bonus = int(game_state.elapsed_time / GROWTH_INTERVAL) * XP_BONUS_PER_GROWTH
+            # 经验球（仅用于视觉和吸引，经验在击杀时直接获得）
             for orb in list(orbs):
                 orb.update(dt, player.rect, game_state.stats["pickup_range"])
                 if orb.rect.colliderect(player.rect):
-                    game_state.experience += XP_PER_ORB + xp_bonus
                     orb.kill()
 
             # 粒子和伤害数字
@@ -596,12 +606,13 @@ def main():
             xp_to_next = xp_for_next - xp_for_current
             current_max_hp = game_state.stats.get("max_hp", PLAYER_MAX_HP)
             draw_hud(screen, font, game_state.level, game_state.experience, xp_to_next,
-                      game_state.player_hp, current_max_hp)
+                      game_state.player_hp, current_max_hp, game_state.elapsed_time)
             draw_skill_bar(screen, font, game_state.acquired_skills, mouse_pos, game_state.elapsed_time)
 
             # 测试模式面板
-            if game_state.test_mode and not game_state.paused and not game_state.game_over:
-                draw_test_mode_panel(screen, font, game_state.acquired_skills, mouse_pos, game_state.test_auto_spawn)
+            # 测试模式面板已禁用
+            # if game_state.test_mode and not game_state.paused and not game_state.game_over:
+            #     draw_test_mode_panel(screen, font, game_state.acquired_skills, mouse_pos, game_state.test_auto_spawn)
 
             # 技能选择
             if game_state.paused and game_state.chosen_skills:

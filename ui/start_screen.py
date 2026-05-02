@@ -1,6 +1,6 @@
 """开始界面"""
 import pygame
-from settings import GOLD
+from settings import GOLD, ENABLE_TEST_MODE
 
 
 def draw_start_screen(screen, big_font, font, small_font):
@@ -57,19 +57,22 @@ def draw_start_screen(screen, big_font, font, small_font):
     hint_rect = hint.get_rect(center=(sw // 2, btn_y + btn_h + 22))
     screen.blit(hint, hint_rect)
 
-    # 测试模式按钮
-    test_btn_w, test_btn_h = 220, 45
-    test_btn_x = (sw - test_btn_w) // 2
-    test_btn_y = btn_y - test_btn_h - 15
-    test_btn_rect = pygame.Rect(test_btn_x, test_btn_y, test_btn_w, test_btn_h)
-    pygame.draw.rect(screen, (30, 50, 30), test_btn_rect)
-    pygame.draw.rect(screen, (100, 200, 100), test_btn_rect, 2)
-    test_btn_text = font.render("测试模式", True, (150, 255, 150))
-    test_btn_text_rect = test_btn_text.get_rect(center=test_btn_rect.center)
-    screen.blit(test_btn_text, test_btn_text_rect)
+    # 测试模式按钮（根据开关显示）
+    if ENABLE_TEST_MODE:
+        test_btn_w, test_btn_h = 220, 45
+        test_btn_x = (sw - test_btn_w) // 2
+        test_btn_y = btn_y - test_btn_h - 15
+        test_btn_rect = pygame.Rect(test_btn_x, test_btn_y, test_btn_w, test_btn_h)
+        pygame.draw.rect(screen, (30, 50, 30), test_btn_rect)
+        pygame.draw.rect(screen, (100, 200, 100), test_btn_rect, 2)
+        test_btn_text = font.render("测试模式", True, (150, 255, 150))
+        test_btn_text_rect = test_btn_text.get_rect(center=test_btn_rect.center)
+        screen.blit(test_btn_text, test_btn_text_rect)
 
-    test_hint = small_font.render("T 键快速进入", True, (80, 150, 80))
-    test_hint_rect = test_hint.get_rect(center=(sw // 2, test_btn_y + test_btn_h + 12))
-    screen.blit(test_hint, test_hint_rect)
+        test_hint = small_font.render("T 键快速进入", True, (80, 150, 80))
+        test_hint_rect = test_hint.get_rect(center=(sw // 2, test_btn_y + test_btn_h + 12))
+        screen.blit(test_hint, test_hint_rect)
 
-    return btn_rect, test_btn_rect
+        return btn_rect, test_btn_rect
+
+    return btn_rect, None
