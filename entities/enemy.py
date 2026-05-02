@@ -1,8 +1,8 @@
 import math
 import pygame
 from settings import ENEMY_SIZE, ENEMY_SPEED, ENEMY_HP, RED, WHITE
-from animation import Animation
-from asset_loader import load_image
+from entities.animation import Animation
+from effects.asset_loader import load_image
 
 
 class Enemy(pygame.sprite.Sprite):

@@ -1,7 +1,7 @@
 import math
 import pygame
 from settings import ORB_RADIUS, ORB_SPEED, PICKUP_RANGE, YELLOW
-from asset_loader import load_image
+from effects.asset_loader import load_image
 
 
 class XpOrb(pygame.sprite.Sprite):

@@ -1,6 +1,6 @@
 import math
 import pygame
-from enemy import Enemy
+from entities.enemy import Enemy
 from settings import (CHARGER_SPEED, CHARGER_HP, CHARGER_DASH_SPEED,
                       CHARGER_DASH_DURATION, CHARGER_DASH_COOLDOWN,
                       CHARGER_COLOR,

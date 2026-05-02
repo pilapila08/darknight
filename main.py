@@ -1,48 +1,43 @@
+"""黑暗之夜 - 主程序"""
 import sys
 import math
 import random
 import pygame
-from settings import (SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK,
-                      SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP,
-                      ELITE_SIZE, ELITE_SPEED, ELITE_HP,
-                      ELITE_CHANCE, ELITE_ACTIVATION,
-                      CHARGER_HP, RANGER_HP, EXPLODER_HP,
-                      EXPLODER_RADIUS, EXPLODER_DAMAGE,
-                      DIFFICULTY_INTERVAL, SPAWN_RATE_FACTOR, HP_BONUS_PER_TIER,
-                      FIRE_INTERVAL, MAP_WIDTH, MAP_HEIGHT, XP_PER_ORB, XP_PER_LEVEL,
-                      PLAYER_SPEED, PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
-                      PICKUP_RANGE, CRIT_MULTIPLIER, REGEN_KILLS, FROSTBITE_SLOW,
-                      WHITE, GRAY, DARK_GRAY, GOLD, BLUE, RED, GREEN)
-from player import Player
-from camera import Camera
-from enemy import Enemy
-from enemy_types import Charger, Ranger, Exploder
-from bullet import Bullet
-from enemy_bullet import EnemyBullet
-from xp_orb import XpOrb
-from particle import Particle
-from damage_number import DamageNumber
-from explosion import Explosion
-from orbital_blade import OrbitalBladeManager
-from chain_lightning import ChainLightning
-from acid_trap import TrapManager
-from skills import get_random_skills, apply_skill
-from audio_manager import AudioManager
-from save_data import load_high_score, save_high_score
+
+from settings import (
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK,
+    SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP,
+    ELITE_SIZE, ELITE_SPEED, ELITE_HP,
+    ELITE_CHANCE, ELITE_ACTIVATION,
+    CHARGER_HP, RANGER_HP, EXPLODER_HP,
+    DIFFICULTY_INTERVAL, SPAWN_RATE_FACTOR, HP_BONUS_PER_TIER,
+    FIRE_INTERVAL, MAP_WIDTH, MAP_HEIGHT, XP_PER_ORB, XP_PER_LEVEL,
+    PLAYER_SPEED, PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
+    PICKUP_RANGE, CRIT_MULTIPLIER, REGEN_KILLS, FROSTBITE_SLOW,
+    WHITE, GRAY, DARK_GRAY, GOLD, BLUE, RED, GREEN
+)
+
+# 游戏实体
+from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
+from entities import XpOrb, Particle, DamageNumber, Explosion, TrapManager
+from effects import OrbitalBladeManager, ChainLightning
+from systems import Camera, AudioManager, load_high_score, save_high_score
+from skills import get_random_skills, apply_skill, SKILL_POOL
+
+# UI模块
+from ui import (
+    draw_hud, draw_skill_bar, draw_start_screen,
+    draw_game_over_screen, draw_skill_selection,
+    draw_test_mode_panel, get_test_skill_rects,
+    get_test_enemy_rects, get_test_auto_spawn_rect,
+    get_font
+)
+
+# 游戏逻辑模块
+from game import GameState, TestModeHandler
 
 
-def _get_font(size):
-    """Get a font that supports Chinese characters."""
-    for name in ("microsoft yahei", "simhei", "simsun", "noto sans cjk sc",
-                 "wenquanyi micro hei", "arial unicode ms", "ms gothic"):
-        try:
-            return pygame.font.SysFont(name, size)
-        except Exception:
-            continue
-    return pygame.font.Font(None, size)
-
-
-# --- Helpers ---
+# ==================== 辅助函数 ====================
 
 _ENEMY_TYPES = ["basic", "charger", "ranger", "exploder"]
 _ENEMY_UNLOCK_TIER = {"basic": 0, "charger": 1, "ranger": 2, "exploder": 3}
@@ -101,11 +96,9 @@ def _nearest_enemy(player_rect, enemies):
 
 
 def _kill_enemy(enemy, particles, orbs, explosions, score, audio=None, fps=60):
-    """Handle enemy death: particles, orbs, explosions, score."""
     count = max(1, int(random.randint(5, 8) * min(1.0, fps / 55.0)))
     for _ in range(count):
-        particles.add(Particle(enemy.rect.centerx, enemy.rect.centery,
-                               enemy._base_color))
+        particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
     if enemy.is_elite:
         orb_count = 3
     elif isinstance(enemy, Exploder):
@@ -121,7 +114,6 @@ def _kill_enemy(enemy, particles, orbs, explosions, score, audio=None, fps=60):
 
 
 def _handle_player_damage(player_hp, damage, invincible_timer, damage_taken):
-    """Apply damage with multiplier, return (new_hp, new_invincible, took_damage)."""
     if invincible_timer <= 0:
         return (player_hp - damage * damage_taken, PLAYER_INVINCIBLE_TIME, True)
     return (player_hp, invincible_timer, False)
@@ -131,219 +123,29 @@ def _calc_player_dps(stats):
     return stats["bullet_damage"] * stats["bullet_count"] / stats["fire_interval"]
 
 
-# --- UI ---
-
-def _draw_ui(screen, font, level, experience, xp_to_next, player_hp, player_max_hp):
-    sw = screen.get_width()
-    bar_width = sw // 2
-    bar_height = 14
-    bar_x = (sw - bar_width) // 2
-
-    xp_y = 8
-    level_text = font.render(f"Lv.{level}", True, WHITE)
-    screen.blit(level_text, (bar_x - 60, xp_y - 2))
-    pygame.draw.rect(screen, DARK_GRAY, (bar_x, xp_y, bar_width, bar_height))
-    fill_width = int(bar_width * (experience / max(1, xp_to_next)))
-    if fill_width > 0:
-        pygame.draw.rect(screen, GOLD, (bar_x, xp_y, fill_width, bar_height))
-
-    hp_y = xp_y + bar_height + 4
-    hp_text = font.render("生命", True, WHITE)
-    screen.blit(hp_text, (bar_x - 40, hp_y - 2))
-    pygame.draw.rect(screen, DARK_GRAY, (bar_x, hp_y, bar_width, bar_height))
-    hp_fill = int(bar_width * (player_hp / player_max_hp))
-    if hp_fill > 0:
-        hp_color = RED if player_hp <= player_max_hp * 0.3 else GREEN
-        pygame.draw.rect(screen, hp_color, (bar_x, hp_y, hp_fill, bar_height))
-
-
-def _draw_skill_selection(screen, big_font, small_font, skills, mouse_pos):
-    sw, sh = screen.get_width(), screen.get_height()
-    # Heavier overlay for better contrast
-    overlay = pygame.Surface((sw, sh))
-    overlay.set_alpha(235)
-    overlay.fill((5, 2, 15))
-    screen.blit(overlay, (0, 0))
-
-    # Title with decorative lines
-    title = big_font.render("选 择 强 化", True, GOLD)
-    title_rect = title.get_rect(center=(sw // 2, sh // 7))
-    # Decorative lines
-    line_w = sw // 5
-    line_y = title_rect.centery
-    pygame.draw.line(screen, (80, 60, 30), (title_rect.left - line_w - 20, line_y),
-                     (title_rect.left - 20, line_y), 2)
-    pygame.draw.line(screen, (80, 60, 30), (title_rect.right + 20, line_y),
-                     (title_rect.right + line_w + 20, line_y), 2)
-    screen.blit(title, title_rect)
-
-    card_w, card_h = 420, 80
-    card_x = (sw - card_w) // 2
-    start_y = sh // 4 + 20
-    gap = 14
-    card_rects = []
-
-    for i, skill in enumerate(skills):
-        rect = pygame.Rect(card_x, start_y + i * (card_h + gap), card_w, card_h)
-        card_rects.append(rect)
-        hovered = rect.collidepoint(mouse_pos)
-
-        # Shadow/glow behind card
-        shadow = rect.inflate(6, 6)
-        pygame.draw.rect(screen, (20, 15, 35), shadow, border_radius=6)
-
-        # Card body
-        if hovered:
-            bg_color = (45, 35, 70)
-            border_color = (255, 230, 100)
-            border_w = 3
-        else:
-            bg_color = (20, 15, 35)
-            border_color = (180, 140, 60)
-            border_w = 2
-        pygame.draw.rect(screen, bg_color, rect, border_radius=6)
-        pygame.draw.rect(screen, border_color, rect, border_w, border_radius=6)
-
-        # Key hint badge (small circle/square in top-left)
-        badge = pygame.Rect(rect.x + 10, rect.y + 10, 26, 26)
-        pygame.draw.rect(screen, border_color, badge, border_radius=4)
-        key_hint = small_font.render(str(i + 1), True, (10, 5, 20))
-        key_rect = key_hint.get_rect(center=badge.center)
-        screen.blit(key_hint, key_rect)
-
-        # Skill name
-        name = small_font.render(skill["name"], True, GOLD if hovered else WHITE)
-        screen.blit(name, (rect.x + 48, rect.y + 12))
-
-        # Description
-        desc_color = (210, 200, 225) if hovered else (170, 160, 190)
-        desc = small_font.render(skill["desc"], True, desc_color)
-        screen.blit(desc, (rect.x + 48, rect.y + 42))
-    return card_rects
-
-
-def _draw_start_screen(screen, big_font, font, small_font):
-    sw, sh = screen.get_width(), screen.get_height()
-    # Dark overlay
-    screen.fill((10, 5, 20))
-
-    # Title
-    title = big_font.render("暗 夜 求 生", True, GOLD)
-    title_rect = title.get_rect(center=(sw // 2, sh // 6))
-    screen.blit(title, title_rect)
-
-    # Subtitle
-    sub = font.render("Darknight Survival", True, (150, 130, 180))
-    sub_rect = sub.get_rect(center=(sw // 2, sh // 6 + 45))
-    screen.blit(sub, sub_rect)
-
-    # Mechanics text
-    lines = [
-        "WASD / 方向键  移动",
-        "自动瞄准最近敌人开火",
-        "击杀敌人掉落经验球  →  升级  →  选择强化",
-        "",
-        "武器系统：",
-        "  旋转利刃 — 环绕自身的刀刃",
-        "  连锁闪电 — 弹跳打击多个敌人",
-        "  剧毒地雷 — 移动时释放毒圈",
-        "",
-        "敌人类型会随时间逐渐解锁",
-    ]
-    y = sh // 3 + 20
-    for line in lines:
-        if line == "":
-            y += 8
-            continue
-        color = GOLD if line.startswith("武器") or line.startswith("敌人") else (200, 200, 210)
-        text = small_font.render(line, True, color)
-        text_rect = text.get_rect(center=(sw // 2, y))
-        screen.blit(text, text_rect)
-        y += 22
-
-    # Start button
-    btn_w, btn_h = 220, 50
-    btn_x = (sw - btn_w) // 2
-    btn_y = sh - 100
-    btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-    pygame.draw.rect(screen, (40, 20, 60), btn_rect)
-    pygame.draw.rect(screen, GOLD, btn_rect, 2)
-    btn_text = font.render("开 始 游 戏", True, GOLD)
-    btn_text_rect = btn_text.get_rect(center=btn_rect.center)
-    screen.blit(btn_text, btn_text_rect)
-
-    hint = small_font.render("按 SPACE 或点击按钮开始", True, (120, 120, 140))
-    hint_rect = hint.get_rect(center=(sw // 2, btn_y + btn_h + 22))
-    screen.blit(hint, hint_rect)
-
-    return btn_rect
-
-
-def _draw_game_over(screen, big_font, font, elapsed_time, score, level, high_score, is_new_record):
-    sw, sh = screen.get_width(), screen.get_height()
-    overlay = pygame.Surface((sw, sh))
-    overlay.set_alpha(220)
-    overlay.fill(BLACK)
-    screen.blit(overlay, (0, 0))
-
-    title = big_font.render("游 戏 结 束", True, RED)
-    title_rect = title.get_rect(center=(sw // 2, sh // 6))
-    screen.blit(title, title_rect)
-
-    y = sh // 3
-    gap = sh // 18
-
-    lines = [
-        f"存活时间：{elapsed_time:.0f} 秒",
-        f"击杀敌人：{score}",
-        f"达到等级：Lv.{level}",
-        f"历史最高分：{high_score}",
-    ]
-    for line in lines:
-        text = font.render(line, True, WHITE)
-        rect = text.get_rect(center=(sw // 2, y))
-        screen.blit(text, rect)
-        y += gap
-
-    if is_new_record:
-        record_text = big_font.render("新 纪 录 ！", True, GOLD)
-        record_rect = record_text.get_rect(center=(sw // 2, y))
-        screen.blit(record_text, record_rect)
-        y += 50
-
-    # Restart button
-    btn_w, btn_h = 240, 50
-    btn_x = (sw - btn_w) // 2
-    btn_y = sh - 120
-    btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-    pygame.draw.rect(screen, DARK_GRAY, btn_rect)
-    pygame.draw.rect(screen, WHITE, btn_rect, 2)
-    btn_text = font.render("重 新 开 始", True, WHITE)
-    btn_text_rect = btn_text.get_rect(center=btn_rect.center)
-    screen.blit(btn_text, btn_text_rect)
-
-    hint = font.render("按 SPACE 或点击按钮重新开始", True, GRAY)
-    hint_rect = hint.get_rect(center=(sw // 2, btn_y + btn_h + 20))
-    screen.blit(hint, hint_rect)
-
-    return btn_rect
-
-
-# --- Main ---
+# ==================== 主程序 ====================
 
 def main():
     pygame.init()
     pygame.key.stop_text_input()
     pygame.event.set_blocked(pygame.TEXTINPUT)
     pygame.event.set_blocked(pygame.TEXTEDITING)
-    screen_w, screen_h = SCREEN_WIDTH, SCREEN_HEIGHT
-    fullscreen = False
-    screen = pygame.display.set_mode((screen_w, screen_h))
+
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("暗夜求生  |  F11 全屏")
     clock = pygame.time.Clock()
     audio = AudioManager()
     audio.start_music()
 
+    # 初始化游戏状态
+    game_state = GameState()
+    test_handler = TestModeHandler()
+
+    font = get_font(24)
+    big_font = get_font(48)
+    dmg_font = get_font(16)
+
+    # 实体对象
     player = Player()
     camera = Camera()
     enemies = pygame.sprite.Group()
@@ -353,49 +155,15 @@ def main():
     particles = pygame.sprite.Group()
     damage_numbers = []
     explosions = []
-
     blade_mgr = OrbitalBladeManager()
     chain_lightning = ChainLightning()
     trap_mgr = TrapManager()
 
-    font = _get_font(24)
-    big_font = _get_font(48)
-    dmg_font = _get_font(16)
-
-    stats = {
-        "fire_interval": FIRE_INTERVAL,
-        "bullet_damage": 1,
-        "player_speed": PLAYER_SPEED,
-        "bullet_count": 1,
-        "pickup_range": PICKUP_RANGE,
-        "damage_taken": 1.0,
-        "has_frostbite": 0,
-        "crit_chance": 0.0,
-        "crit_multiplier": CRIT_MULTIPLIER,
-        "has_regen": 0,
-        "regen_kills": 0,
-        "has_blades": 0,
-        "has_lightning": 0,
-        "has_traps": 0,
-    }
-
-    spawn_timer = 0.0
-    fire_timer = 0.0
-    score = 0
-    experience = 0
-    level = 1
-    paused = False
-    chosen_skills = None
-    elapsed_time = 0.0
-    difficulty_level = 0
-    player_hp = PLAYER_MAX_HP
-    invincible_timer = 1.5  # spawn protection
-    menu = True
-    game_over = False
+    fullscreen = False
     high_score = load_high_score()
     new_record = False
 
-    # FPS tracking
+    # FPS跟踪
     fps_smooth = 60.0
     fps_display = "60"
 
@@ -406,32 +174,63 @@ def main():
         fps_display = f"{fps_smooth:.0f}"
         mouse_pos = pygame.mouse.get_pos()
 
-        # --- Events ---
+        # ==================== 事件处理 ====================
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if menu:
+
+            # 菜单状态
+            if game_state.menu:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    menu = False
+                    game_state.menu = False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
+                    game_state.menu = False
+                    game_state.test_mode = True
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     btn_rect = pygame.Rect(
-                        (screen.get_width() - 220) // 2, screen.get_height() - 100, 220, 50)
+                        (SCREEN_WIDTH - 220) // 2, SCREEN_HEIGHT - 100, 220, 50)
                     if btn_rect.collidepoint(event.pos):
-                        menu = False
-                continue  # skip rest of events while in menu
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-                if event.key == pygame.K_F11:
-                    fullscreen = not fullscreen
-                    if fullscreen:
-                        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-                    else:
-                        screen = pygame.display.set_mode((screen_w, screen_h))
-                    screen_w, screen_h = screen.get_size()
-                if paused and chosen_skills:
+                        game_state.menu = False
+                    test_btn_rect = pygame.Rect(
+                        (SCREEN_WIDTH - 220) // 2, SCREEN_HEIGHT - 160, 220, 45)
+                    if test_btn_rect.collidepoint(event.pos):
+                        game_state.menu = False
+                        game_state.test_mode = True
+                continue
+
+            # 游戏结束状态
+            if game_state.game_over:
+                do_restart = False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    do_restart = True
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    btn_rect = pygame.Rect(
+                        (SCREEN_WIDTH - 240) // 2, SCREEN_HEIGHT - 120, 240, 50)
+                    if btn_rect.collidepoint(event.pos):
+                        do_restart = True
+                if do_restart:
+                    game_state.reset()
+                    player = Player()
+                    camera = Camera()
+                    enemies = pygame.sprite.Group()
+                    bullets = pygame.sprite.Group()
+                    enemy_bullets = pygame.sprite.Group()
+                    orbs = pygame.sprite.Group()
+                    particles = pygame.sprite.Group()
+                    damage_numbers = []
+                    explosions = []
+                    trap_mgr = TrapManager()
+                    blade_mgr = OrbitalBladeManager()
+                    chain_lightning = ChainLightning()
+                    high_score = load_high_score()
+                    new_record = False
+                continue
+
+            # 技能选择
+            if game_state.paused and game_state.chosen_skills:
+                from ui.skill_select import build_card_rects
+                if event.type == pygame.KEYDOWN:
                     idx = -1
                     if event.key == pygame.K_1:
                         idx = 0
@@ -439,86 +238,73 @@ def main():
                         idx = 1
                     elif event.key == pygame.K_3:
                         idx = 2
-                    if 0 <= idx < len(chosen_skills):
-                        apply_skill(stats, chosen_skills[idx])
-                        player.speed = stats["player_speed"]
-                        if stats.get("has_blades", 0) > 0:
-                            blade_mgr.set_count(stats["bullet_count"] + stats["has_blades"])
-                        chosen_skills = None
-                        paused = False
-            if event.type == pygame.MOUSEBUTTONDOWN and paused and chosen_skills:
-                card_rects = _build_card_rects(len(chosen_skills), screen.get_width(), screen.get_height())
-                for i, rect in enumerate(card_rects):
-                    if rect.collidepoint(event.pos):
-                        apply_skill(stats, chosen_skills[i])
-                        player.speed = stats["player_speed"]
-                        if stats.get("has_blades", 0) > 0:
-                            blade_mgr.set_count(stats["bullet_count"] + stats["has_blades"])
-                        chosen_skills = None
-                        paused = False
-                        break
-            if game_over:
-                do_restart = False
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    do_restart = True
+                    if 0 <= idx < len(game_state.chosen_skills):
+                        skill = game_state.chosen_skills[idx]
+                        apply_skill(game_state.stats, skill)
+                        game_state.apply_skill_update(skill, player, blade_mgr)
+                        game_state.chosen_skills = None
+                        game_state.paused = False
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    btn_rect = pygame.Rect(
-                        (screen.get_width() - 240) // 2, screen.get_height() - 120, 240, 50)
-                    if btn_rect.collidepoint(event.pos):
-                        do_restart = True
-                if do_restart:
-                    # Reset all state
-                    player = Player()
-                    camera = Camera()
-                    enemies.empty()
-                    bullets.empty()
-                    enemy_bullets.empty()
-                    orbs.empty()
-                    particles.empty()
-                    damage_numbers.clear()
-                    explosions.clear()
-                    trap_mgr = TrapManager()
-                    blade_mgr = OrbitalBladeManager()
-                    chain_lightning = ChainLightning()
-                    stats = {
-                        "fire_interval": FIRE_INTERVAL,
-                        "bullet_damage": 1,
-                        "player_speed": PLAYER_SPEED,
-                        "bullet_count": 1,
-                        "pickup_range": PICKUP_RANGE,
-                        "damage_taken": 1.0,
-                        "has_frostbite": 0,
-                        "crit_chance": 0.0,
-                        "crit_multiplier": CRIT_MULTIPLIER,
-                        "has_regen": 0,
-                        "regen_kills": 0,
-                        "has_blades": 0,
-                        "has_lightning": 0,
-                        "has_traps": 0,
-                    }
-                    spawn_timer = 0.0
-                    fire_timer = 0.0
-                    score = 0
-                    experience = 0
-                    level = 1
-                    paused = False
-                    chosen_skills = None
-                    elapsed_time = 0.0
-                    difficulty_level = 0
-                    player_hp = PLAYER_MAX_HP
-                    invincible_timer = 1.5
-                    game_over = False
-                    new_record = False
-                    high_score = load_high_score()
+                    card_rects = build_card_rects(len(game_state.chosen_skills), SCREEN_WIDTH, SCREEN_HEIGHT)
+                    for i, rect in enumerate(card_rects):
+                        if rect.collidepoint(event.pos):
+                            skill = game_state.chosen_skills[i]
+                            apply_skill(game_state.stats, skill)
+                            game_state.apply_skill_update(skill, player, blade_mgr)
+                            game_state.chosen_skills = None
+                            game_state.paused = False
+                            break
 
-        # --- Update ---
-        if not menu and not paused and not game_over:
-            elapsed_time += dt
-            if invincible_timer > 0:
-                invincible_timer -= dt
+            # 测试模式点击
+            if game_state.test_mode and event.type == pygame.MOUSEBUTTONDOWN:
+                # 技能面板点击
+                skill_rects = get_test_skill_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+                for i, skill in enumerate(SKILL_POOL):
+                    if skill_rects[i].collidepoint(event.pos):
+                        test_handler.handle_skill_click(skill, game_state.stats, player, blade_mgr)
+                        game_state.acquired_skills.append(skill["name"])
+                        break
 
-            difficulty_level = int(elapsed_time / DIFFICULTY_INTERVAL)
-            current_spawn_interval = SPAWN_INTERVAL * (SPAWN_RATE_FACTOR ** difficulty_level)
+                # 敌人生成点击
+                enemy_rects = get_test_enemy_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+                for i, enemy_rect in enumerate(enemy_rects):
+                    if enemy_rect.collidepoint(event.pos) and i < len(_ENEMY_TYPES):
+                        test_handler.spawn_enemy_near_player(_ENEMY_TYPES[i], enemies, player)
+                        break
+
+                # 自动生成开关
+                auto_rect = get_test_auto_spawn_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
+                if auto_rect.collidepoint(event.pos):
+                    test_handler.toggle_auto_spawn()
+                    game_state.test_auto_spawn = test_handler.auto_spawn
+
+            # 常规按键
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if game_state.test_mode:
+                        # 退出测试模式，返回主菜单
+                        game_state.test_mode = False
+                        game_state.menu = True
+                        game_state.reset()
+                    else:
+                        pygame.quit()
+                        sys.exit()
+
+                if event.key == pygame.K_F11:
+                    fullscreen = not fullscreen
+                    if fullscreen:
+                        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                    else:
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+        # ==================== 游戏逻辑更新 ====================
+        if not game_state.menu and not game_state.paused and not game_state.game_over:
+            game_state.elapsed_time += dt
+            if game_state.invincible_timer > 0:
+                game_state.invincible_timer -= dt
+
+            game_state.difficulty_level = int(game_state.elapsed_time / DIFFICULTY_INTERVAL)
+            current_spawn_interval = SPAWN_INTERVAL * (SPAWN_RATE_FACTOR ** game_state.difficulty_level)
 
             keys = pygame.key.get_pressed()
             player.update(dt, keys)
@@ -526,19 +312,20 @@ def main():
 
             is_moving = keys[pygame.K_w] or keys[pygame.K_a] or keys[pygame.K_s] or keys[pygame.K_d]
 
-            # --- Spawn ---
-            spawn_timer += dt
-            while spawn_timer >= current_spawn_interval:
-                spawn_timer -= current_spawn_interval
-                enemies.add(_spawn_enemy(camera, elapsed_time, difficulty_level))
+            # 生成敌人
+            game_state.spawn_timer += dt
+            while game_state.spawn_timer >= current_spawn_interval:
+                game_state.spawn_timer -= current_spawn_interval
+                if test_handler.should_spawn_enemies(game_state.test_mode):
+                    enemies.add(_spawn_enemy(camera, game_state.elapsed_time, game_state.difficulty_level))
 
-            # --- Auto-gun ---
-            fire_timer += dt
-            while fire_timer >= stats["fire_interval"] and enemies:
-                fire_timer -= stats["fire_interval"]
+            # 自动射击
+            game_state.fire_timer += dt
+            while game_state.fire_timer >= game_state.stats["fire_interval"] and enemies:
+                game_state.fire_timer -= game_state.stats["fire_interval"]
                 target = _nearest_enemy(player.rect, enemies)
                 if target:
-                    bullet_count = stats["bullet_count"]
+                    bullet_count = game_state.stats["bullet_count"]
                     dx = target.rect.centerx - player.rect.centerx
                     dy = target.rect.centery - player.rect.centery
                     base_angle = math.atan2(dy, dx)
@@ -551,74 +338,69 @@ def main():
                         bullets.add(Bullet(player.rect.centerx, player.rect.centery, (tx, ty)))
                 audio.play_shoot()
 
-            # --- Update all entities ---
+            # 更新实体
             enemies.update(dt, player.rect)
             bullets.update(dt)
             enemy_bullets.update(dt)
 
-            # --- Orbital Blades ---
-            if stats.get("has_blades", 0) > 0:
+            # 武器系统 - 旋转利刃
+            if game_state.stats.get("has_blades", 0) > 0:
                 blade_mgr.update(dt)
-                blade_hits = blade_mgr.check_damage(player.rect, enemies, dt, stats)
+                blade_hits = blade_mgr.check_damage(player.rect, enemies, dt, game_state.stats)
                 for enemy, dmg, dead in blade_hits:
-                    damage_numbers.append(DamageNumber(
-                        enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
-                    if stats.get("has_frostbite", 0) > 0:
+                    damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
+                    if game_state.stats.get("has_frostbite", 0) > 0:
                         enemy.apply_frostbite(FROSTBITE_SLOW)
                     if dead:
-                        score = _kill_enemy(enemy, particles, orbs, explosions, score, audio, fps_smooth)
+                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                         enemy.kill()
 
-            # --- Chain Lightning ---
-            if stats.get("has_lightning", 0) > 0:
-                lightning_hits = chain_lightning.update(dt, player.rect, enemies, stats)
+            # 连锁闪电
+            if game_state.stats.get("has_lightning", 0) > 0:
+                lightning_hits = chain_lightning.update(dt, player.rect, enemies, game_state.stats)
                 for enemy, dmg, dead in lightning_hits:
-                    damage_numbers.append(DamageNumber(
-                        enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
+                    damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
                     if dead:
-                        score = _kill_enemy(enemy, particles, orbs, explosions, score, audio, fps_smooth)
+                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                         enemy.kill()
 
-            # --- Acid Traps ---
-            if stats.get("has_traps", 0) > 0:
-                trap_interval = 2.0 * (0.85 ** (stats.get("has_traps", 1) - 1))
+            # 剧毒地雷
+            if game_state.stats.get("has_traps", 0) > 0:
+                trap_interval = 2.0 * (0.85 ** (game_state.stats.get("has_traps", 1) - 1))
                 trap_mgr.update(dt, player, is_moving, trap_interval)
                 for trap in list(trap_mgr.group):
                     trap.check_enemies(enemies)
 
-            # --- DoT death check ---
+            # 持续伤害死亡检查
             for enemy in list(enemies):
                 if enemy.hp <= 0:
-                    score = _kill_enemy(enemy, particles, orbs, explosions, score, audio, fps_smooth)
+                    game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                     enemy.kill()
 
-            # --- Ranger fire ---
+            # 射手开火
             for enemy in list(enemies):
                 if isinstance(enemy, Ranger) and enemy.wants_to_fire():
                     enemy_bullets.add(EnemyBullet(
                         enemy.rect.centerx, enemy.rect.centery,
                         player.rect.centerx, player.rect.centery))
 
-            # --- Off-map cleanup ---
+            # 离屏清理
             for bullet in list(bullets):
-                if not (0 <= bullet.rect.centerx <= MAP_WIDTH and
-                        0 <= bullet.rect.centery <= MAP_HEIGHT):
+                if not (0 <= bullet.rect.centerx <= MAP_WIDTH and 0 <= bullet.rect.centery <= MAP_HEIGHT):
                     bullet.kill()
             for eb in list(enemy_bullets):
-                if not (0 <= eb.rect.centerx <= MAP_WIDTH and
-                        0 <= eb.rect.centery <= MAP_HEIGHT):
+                if not (0 <= eb.rect.centerx <= MAP_WIDTH and 0 <= eb.rect.centery <= MAP_HEIGHT):
                     eb.kill()
 
-            # --- Player bullets vs enemies ---
+            # 子弹碰撞
             hits = pygame.sprite.groupcollide(bullets, enemies, False, False)
             for bullet, hit_enemies in hits.items():
                 bullet.kill()
                 for enemy in hit_enemies:
-                    dmg = stats["bullet_damage"]
-                    is_crit = random.random() < stats["crit_chance"]
+                    dmg = game_state.stats["bullet_damage"]
+                    is_crit = random.random() < game_state.stats["crit_chance"]
                     if is_crit:
-                        dmg *= stats["crit_multiplier"]
-                        # Knockback: push enemy away from player
+                        dmg *= game_state.stats["crit_multiplier"]
                         kx = enemy.rect.centerx - player.rect.centerx
                         ky = enemy.rect.centery - player.rect.centery
                         kdist = math.hypot(kx, ky)
@@ -627,43 +409,38 @@ def main():
                             enemy.rect.y += (ky / kdist) * 12
 
                     dead = enemy.take_damage(dmg)
-                    damage_numbers.append(DamageNumber(
-                        enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
+                    damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), dmg_font))
 
-                    if stats.get("has_frostbite", 0) > 0:
+                    if game_state.stats.get("has_frostbite", 0) > 0:
                         enemy.apply_frostbite(FROSTBITE_SLOW)
 
                     if dead:
-                        score = _kill_enemy(enemy, particles, orbs, explosions, score, audio, fps_smooth)
+                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                         enemy.kill()
-                        # Regen tracking
-                        if stats.get("has_regen", 0) > 0:
-                            stats["regen_kills"] += 1
-                            if stats["regen_kills"] >= REGEN_KILLS:
-                                stats["regen_kills"] -= REGEN_KILLS
-                                player_hp = min(PLAYER_MAX_HP, player_hp + 1)
+                        if game_state.stats.get("has_regen", 0) > 0:
+                            game_state.stats["regen_kills"] += 1
+                            if game_state.stats["regen_kills"] >= REGEN_KILLS:
+                                game_state.stats["regen_kills"] -= REGEN_KILLS
+                                game_state.player_hp = min(PLAYER_MAX_HP, game_state.player_hp + 1)
                     break
 
-            # --- Enemy bullets vs player ---
-            if invincible_timer <= 0:
+            # 敌人子弹碰撞
+            if game_state.invincible_timer <= 0:
                 for eb in list(enemy_bullets):
                     if eb.rect.colliderect(player.rect):
-                        player_hp, invincible_timer, hit = _handle_player_damage(
-                            player_hp, eb.damage, invincible_timer, stats["damage_taken"])
-                        if hit:
-                            camera.shake(0.12, 5)
+                        game_state.player_hp, game_state.invincible_timer, _ = _handle_player_damage(
+                            game_state.player_hp, eb.damage, game_state.invincible_timer, game_state.stats["damage_taken"])
+                        camera.shake(0.12, 5)
                         eb.kill()
                         break
 
-            # --- Enemy contact vs player ---
-            if invincible_timer <= 0:
+            # 敌人接触
+            if game_state.invincible_timer <= 0:
                 for enemy in list(enemies):
                     if enemy.rect.colliderect(player.rect) and enemy.contact_damage > 0:
-                        player_hp, invincible_timer, hit = _handle_player_damage(
-                            player_hp, enemy.contact_damage, invincible_timer, stats["damage_taken"])
-                        if hit:
-                            camera.shake(0.15, 6)
-                        # Knock enemy away so it doesn't sit on the player
+                        game_state.player_hp, game_state.invincible_timer, _ = _handle_player_damage(
+                            game_state.player_hp, enemy.contact_damage, game_state.invincible_timer, game_state.stats["damage_taken"])
+                        camera.shake(0.15, 6)
                         kx = enemy.rect.centerx - player.rect.centerx
                         ky = enemy.rect.centery - player.rect.centery
                         kdist = math.hypot(kx, ky)
@@ -672,121 +449,119 @@ def main():
                             enemy.rect.y += (ky / kdist) * 30
                         break
 
-            # --- Explosions ---
+            # 爆炸
             for exp in explosions:
                 exp.update(dt)
                 if not exp._applied:
                     player_hit = exp.apply_damage(player, enemies)
-                    if player_hit and invincible_timer <= 0:
-                        player_hp, invincible_timer, _ = _handle_player_damage(
-                            player_hp, exp.damage, invincible_timer, stats["damage_taken"])
-                # Check enemies killed by explosion
+                    if player_hit and game_state.invincible_timer <= 0:
+                        game_state.player_hp, game_state.invincible_timer, _ = _handle_player_damage(
+                            game_state.player_hp, exp.damage, game_state.invincible_timer, game_state.stats["damage_taken"])
                 for enemy in list(enemies):
                     if enemy.hp <= 0:
-                        score = _kill_enemy(enemy, particles, orbs, explosions, score, audio, fps_smooth)
+                        game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                         enemy.kill()
             explosions = [e for e in explosions if e.alive]
 
-            # --- Orbs ---
+            # 经验球
             for orb in list(orbs):
-                orb.update(dt, player.rect, stats["pickup_range"])
+                orb.update(dt, player.rect, game_state.stats["pickup_range"])
                 if orb.rect.colliderect(player.rect):
-                    experience += XP_PER_ORB
+                    game_state.experience += XP_PER_ORB
                     orb.kill()
 
-            # --- Particles & damage numbers ---
+            # 粒子和伤害数字
             particles.update(dt)
             for dn in damage_numbers[:]:
                 dn.update(dt)
                 if not dn.alive:
                     damage_numbers.remove(dn)
 
-            # --- Level-up ---
-            xp_to_next = level * XP_PER_LEVEL
-            if experience >= xp_to_next:
-                experience -= xp_to_next
-                level += 1
-                paused = True
-                chosen_skills = get_random_skills(3)
+            # 升级
+            xp_to_next = game_state.level * XP_PER_LEVEL
+            if game_state.experience >= xp_to_next:
+                game_state.experience -= xp_to_next
+                game_state.level += 1
+                game_state.paused = True
+                game_state.chosen_skills = get_random_skills(3)
                 audio.play_level_up()
 
-            # --- Game over ---
-            if player_hp <= 0:
-                game_over = True
-                new_record = save_high_score(score)
+            # 死亡检查
+            if game_state.player_hp <= 0:
+                game_state.game_over = True
+                new_record = save_high_score(game_state.score)
                 if new_record:
-                    high_score = score
+                    high_score = game_state.score
 
-        # --- Draw ---
-        if menu:
-            _draw_start_screen(screen, big_font, font, font)
-            pygame.display.flip()
-            continue
+        # ==================== 渲染 ====================
+        if game_state.menu:
+            draw_start_screen(screen, big_font, font, font)
+        else:
+            screen.fill(BLACK)
+            camera.draw_grid(screen)
 
-        screen.fill(BLACK)
-        camera.draw_grid(screen)
+            # 毒圈
+            if game_state.stats.get("has_traps", 0) > 0:
+                for trap in trap_mgr.group:
+                    screen.blit(trap.image, camera.apply(trap.rect))
 
-        # Traps (drawn under entities)
-        if stats.get("has_traps", 0) > 0:
-            for trap in trap_mgr.group:
-                screen.blit(trap.image, camera.apply(trap.rect))
+            # 实体
+            player.draw(screen, camera)
+            for enemy in enemies:
+                screen.blit(enemy.image, camera.apply(enemy.rect))
+            for bullet in bullets:
+                screen.blit(bullet.image, camera.apply(bullet.rect))
+            for eb in enemy_bullets:
+                screen.blit(eb.image, camera.apply(eb.rect))
+            for orb in orbs:
+                screen.blit(orb.image, camera.apply(orb.rect))
+            for particle in particles:
+                screen.blit(particle.image, camera.apply(particle.rect))
 
-        player.draw(screen, camera)
-        for enemy in enemies:
-            screen.blit(enemy.image, camera.apply(enemy.rect))
-        for bullet in bullets:
-            screen.blit(bullet.image, camera.apply(bullet.rect))
-        for eb in enemy_bullets:
-            screen.blit(eb.image, camera.apply(eb.rect))
-        for orb in orbs:
-            screen.blit(orb.image, camera.apply(orb.rect))
-        for particle in particles:
-            screen.blit(particle.image, camera.apply(particle.rect))
+            # 武器特效
+            if game_state.stats.get("has_blades", 0) > 0:
+                blade_mgr.draw(screen, camera, player.rect)
+            if game_state.stats.get("has_lightning", 0) > 0:
+                chain_lightning.draw(screen, camera)
 
-        # Orbital blades
-        if stats.get("has_blades", 0) > 0:
-            blade_mgr.draw(screen, camera, player.rect)
+            # 爆炸和伤害数字
+            for exp in explosions:
+                exp.draw(screen, camera)
+            for dn in damage_numbers:
+                dn.draw(screen, camera)
 
-        # Chain lightning bolts
-        if stats.get("has_lightning", 0) > 0:
-            chain_lightning.draw(screen, camera)
+            # HUD
+            xp_to_next = game_state.level * XP_PER_LEVEL
+            draw_hud(screen, font, game_state.level, game_state.experience, xp_to_next,
+                      game_state.player_hp, PLAYER_MAX_HP)
+            draw_skill_bar(screen, font, game_state.acquired_skills, mouse_pos, game_state.elapsed_time)
 
-        # Explosions & damage numbers
-        for exp in explosions:
-            exp.draw(screen, camera)
-        for dn in damage_numbers:
-            dn.draw(screen, camera)
+            # 测试模式面板
+            if game_state.test_mode and not game_state.paused and not game_state.game_over:
+                draw_test_mode_panel(screen, font, game_state.acquired_skills, mouse_pos, game_state.test_auto_spawn)
 
-        xp_to_next = level * XP_PER_LEVEL
-        _draw_ui(screen, font, level, experience, xp_to_next, player_hp, PLAYER_MAX_HP)
+            # 技能选择
+            if game_state.paused and game_state.chosen_skills:
+                draw_skill_selection(screen, big_font, font, game_state.chosen_skills, mouse_pos)
 
-        if paused and chosen_skills:
-            _draw_skill_selection(screen, big_font, font, chosen_skills, mouse_pos)
+            # 游戏结束
+            if game_state.game_over:
+                draw_game_over_screen(screen, big_font, font, game_state.elapsed_time, game_state.score,
+                                     game_state.level, high_score, new_record)
 
-        if game_over:
-            _draw_game_over(screen, big_font, font, elapsed_time, score, level,
-                           high_score, new_record)
+            # FPS
+            fps_color = GREEN if fps_smooth >= 55 else (RED if fps_smooth < 30 else GOLD)
+            fps_text = font.render(fps_display, True, fps_color)
+            screen.blit(fps_text, (screen.get_width() - fps_text.get_width() - 8, 8))
 
-        # FPS counter (top-right)
-        fps_color = GREEN if fps_smooth >= 55 else (RED if fps_smooth < 30 else GOLD)
-        fps_text = font.render(fps_display, True, fps_color)
-        screen.blit(fps_text, (screen.get_width() - fps_text.get_width() - 8, 8))
+            # 标题栏
+            player_dps = _calc_player_dps(game_state.stats)
+            time_str = f"{game_state.elapsed_time:.0f}s"
+            bc = game_state.stats["bullet_count"]
+            title = f"击杀:{game_state.score} | DPS:{player_dps:.0f} | {time_str} | 难度{game_state.difficulty_level} | 刀:{bc+1}"
+            pygame.display.set_caption(title)
 
-        player_dps = _calc_player_dps(stats)
-        time_str = f"{elapsed_time:.0f}s"
-        bc = stats["bullet_count"]
-        title = f"击杀:{score} | DPS:{player_dps:.0f} | {time_str} | 难度{difficulty_level} | 刀:{bc+1}"
-        pygame.display.set_caption(title)
         pygame.display.flip()
-
-
-def _build_card_rects(count, sw=SCREEN_WIDTH, sh=SCREEN_HEIGHT):
-    card_w, card_h = 420, 80
-    card_x = (sw - card_w) // 2
-    start_y = sh // 4 + 20
-    gap = 14
-    return [pygame.Rect(card_x, start_y + i * (card_h + gap), card_w, card_h)
-            for i in range(count)]
 
 
 if __name__ == "__main__":

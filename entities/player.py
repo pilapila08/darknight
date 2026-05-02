@@ -1,7 +1,7 @@
 import pygame
 from settings import MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, WHITE
-from animation import Animation
-from asset_loader import load_image
+from entities.animation import Animation
+from effects.asset_loader import load_image
 
 
 class Player:
