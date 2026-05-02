@@ -2,6 +2,44 @@
 
 类《吸血鬼幸存者》的俯视角自动射击 Roguelite 游戏。在黑夜中生存，击杀敌人，拾取经验，升级强化，挑战最高分。
 
+## 版本更新记录
+
+### v2.0 (2026-05-02) - 模块化重构版本
+
+**主要更新：**
+- 将所有代码重构为模块化项目结构，分离关注点
+- 新增目录：`entities/`、`effects/`、`systems/`、`ui/`、`game/`
+- 代码组织更清晰，便于维护和扩展
+- 修复了模块间导入路径问题
+
+**目录结构变更：**
+```
+darknight/
+├── entities/     # 游戏实体（玩家、敌人、子弹、粒子等）
+├── effects/      # 特效系统（武器、技能特效）
+├── systems/      # 游戏系统（摄像机、音频、存档）
+├── ui/           # UI 模块（界面、HUD、技能栏）
+├── game/         # 游戏逻辑（状态管理、测试模式）
+├── main.py       # 主入口
+└── settings.py   # 配置
+```
+
+---
+
+### v1.0 (早期版本) - 初始版本
+
+**主要功能：**
+- 基础 Roguelite 游戏框架
+- 自动射击系统
+- 武器系统：自动枪、旋转利刃、连锁闪电、剧毒地雷
+- 成长技能系统
+- 多种敌人类型
+- 动态难度系统
+- 素材自定义支持
+- 存档功能
+
+---
+
 ## 快速开始
 
 ```bash
@@ -111,32 +149,52 @@ pyinstaller --onefile --windowed --name "VampireSurvivors-like" --add-data "asse
 ## 项目结构
 
 ```
-souls/
+darknight/
 ├── main.py              # 入口 + 主循环 + UI
 ├── settings.py          # 全部常量配置
-├── player.py            # 玩家类
-├── enemy.py             # 敌人类（HP / 动画 / DoT / 减速）
-├── enemy_types.py       # Charger / Ranger / Exploder
-├── enemy_bullet.py      # 敌人子弹（Ranger）
-├── bullet.py            # 玩家子弹
-├── xp_orb.py            # 经验球
-├── particle.py          # 死亡粒子
-├── damage_number.py     # 浮动伤害数字
-├── explosion.py         # AoE 爆炸效果
-├── camera.py            # 摄像机 + 震屏
-├── orbital_blade.py     # 旋转利刃武器
-├── chain_lightning.py   # 连环闪电武器
-├── acid_trap.py         # 剧毒地雷武器
-├── skills.py            # 11 种升级技能池
-├── audio_manager.py     # 音频合成 + 播放
-├── animation.py         # 帧动画类
-├── asset_loader.py      # 素材加载 + 程序化生成降级
-├── save_data.py         # 最高分 JSON 持久化
+├── skills.py            # 技能配置
 ├── requirements.txt     # Python 依赖
+│
+├── entities/            # 游戏实体
+│   ├── player.py        # 玩家
+│   ├── enemy.py         # 敌人类
+│   ├── enemy_types.py   # 敌人类型（冲锋/射手/自爆）
+│   ├── bullet.py        # 玩家子弹
+│   ├── enemy_bullet.py  # 敌弹
+│   ├── xp_orb.py        # 经验球
+│   ├── particle.py      # 粒子效果
+│   ├── damage_number.py # 伤害数字
+│   ├── explosion.py     # 爆炸效果
+│   ├── animation.py     # 动画系统
+│   └── acid_trap.py     # 毒雷陷阱
+│
+├── effects/             # 特效系统
+│   ├── orbital_blade.py # 旋转利刃
+│   ├── chain_lightning.py # 连锁闪电
+│   └── asset_loader.py  # 资源加载
+│
+├── systems/             # 游戏系统
+│   ├── camera.py        # 摄像机
+│   ├── audio_manager.py # 音频管理
+│   └── save_data.py     # 存档管理
+│
+├── ui/                  # UI 模块
+│   ├── drawables.py     # 基础绘制工具
+│   ├── hud.py           # 游戏 HUD
+│   ├── skill_bar.py     # 技能栏
+│   ├── start_screen.py  # 开始界面
+│   ├── game_over.py     # 结束界面
+│   ├── skill_select.py  # 技能选择
+│   └── test_panel.py    # 测试面板
+│
+├── game/                # 游戏逻辑
+│   ├── state.py         # 游戏状态
+│   └── test_mode.py     # 测试模式
+│
 ├── assets/
 │   ├── sprites/         # 替换 .png 素材（可选）
 │   └── sounds/          # 替换 .wav 素材（可选）
-└── souls_save.json      # 运行时自动生成
+└── darknight_save.json  # 存档（运行时自动生成）
 ```
 
 ## 许可
