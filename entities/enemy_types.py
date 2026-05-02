@@ -10,10 +10,11 @@ from settings import (CHARGER_SPEED, CHARGER_HP, CHARGER_DASH_SPEED,
 
 
 class Charger(Enemy):
-    def __init__(self, x, y, hp=None):
+    def __init__(self, x, y, hp=None, damage=None):
         hp = hp if hp is not None else CHARGER_HP
+        damage = damage if damage is not None else 1
         super().__init__(x, y, hp=hp, speed=CHARGER_SPEED, color=CHARGER_COLOR, sprite_name="charger")
-        self.contact_damage = 1
+        self.contact_damage = damage
         self._base_speed = CHARGER_SPEED
         self._dash_cooldown = CHARGER_DASH_COOLDOWN
         self._dash_duration = 0.0
@@ -25,12 +26,12 @@ class Charger(Enemy):
         self._dash_duration = CHARGER_DASH_DURATION
         self._dash_target = (player_rect.centerx, player_rect.centery)
         self.speed = CHARGER_DASH_SPEED
-        self.contact_damage = 2
+        self.contact_damage = self.contact_damage + 1
 
     def _end_dash(self):
         self._is_dashing = False
         self.speed = self._base_speed
-        self.contact_damage = 1
+        self.contact_damage = self.contact_damage - 1
         self._dash_cooldown = CHARGER_DASH_COOLDOWN
 
     def update(self, dt, player_rect):
@@ -51,10 +52,11 @@ class Charger(Enemy):
 
 
 class Ranger(Enemy):
-    def __init__(self, x, y, hp=None):
+    def __init__(self, x, y, hp=None, damage=None):
         hp = hp if hp is not None else RANGER_HP
+        damage = damage if damage is not None else 1
         super().__init__(x, y, hp=hp, speed=RANGER_SPEED, color=RANGER_COLOR, sprite_name="ranger")
-        self.contact_damage = 0
+        self.contact_damage = damage
         self._fire_timer = 0.0
 
     def update(self, dt, player_rect):
@@ -76,7 +78,8 @@ class Ranger(Enemy):
 
 
 class Exploder(Enemy):
-    def __init__(self, x, y, hp=None):
+    def __init__(self, x, y, hp=None, damage=None):
         hp = hp if hp is not None else EXPLODER_HP
+        damage = damage if damage is not None else 1
         super().__init__(x, y, hp=hp, speed=EXPLODER_SPEED, color=EXPLODER_COLOR, sprite_name="exploder")
-        self.contact_damage = 1
+        self.contact_damage = damage

@@ -6,13 +6,14 @@ from effects.asset_loader import load_image
 
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y, hp=None, speed=None, size=None, color=None, is_elite=False, sprite_name="enemy"):
+    def __init__(self, x, y, hp=None, speed=None, size=None, color=None,
+                 is_elite=False, sprite_name="enemy", contact_damage=None):
         super().__init__()
         self.hp = hp if hp is not None else ENEMY_HP
         self.max_hp = self.hp
         self.speed = speed if speed is not None else ENEMY_SPEED
         self.is_elite = is_elite
-        self.contact_damage = 1
+        self.contact_damage = contact_damage if contact_damage is not None else 1
         size = size if size is not None else ENEMY_SIZE
         color = color if color is not None else RED
 

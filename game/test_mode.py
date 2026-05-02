@@ -18,7 +18,7 @@ class TestModeHandler:
         apply_skill(stats, skill)
         player.speed = stats["player_speed"]
         if skill["key"] == "has_blades":
-            blade_mgr.set_count(stats["bullet_count"] + stats["has_blades"])
+            blade_mgr.set_count(stats.get("blade_count", 3))
 
     def spawn_enemy_near_player(self, enemy_type, enemies, player):
         """在玩家附近生成敌人"""

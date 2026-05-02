@@ -98,6 +98,25 @@ def draw_skill_icon_shape(screen, x, y, size, icon_info):
         pygame.draw.circle(screen, glow, (cx, cy), size // 5)
         pygame.draw.circle(screen, color, (cx, cy), 3)
 
+    elif shape == "shield":
+        points = [
+            (cx, y + 6),
+            (x + size - 8, y + 12),
+            (x + size - 8, y + size // 2),
+            (cx, y + size - 6),
+            (x + 8, y + size // 2),
+            (x + 8, y + 12),
+        ]
+        pygame.draw.polygon(screen, color, points)
+        pygame.draw.polygon(screen, glow, [
+            (cx, y + 10),
+            (x + size - 12, y + 14),
+            (x + size - 12, y + size // 2 - 2),
+            (cx, y + size - 10),
+            (x + 12, y + size // 2 - 2),
+            (x + 12, y + 14),
+        ])
+
 
 # 技能图标配置
 SKILL_ICONS = {
@@ -144,5 +163,9 @@ SKILL_ICONS = {
     "剧毒地雷": {
         "color": (80, 200, 100), "glow": (140, 240, 150),
         "shape": "trap", "border": (50, 160, 70),
+    },
+    "钢铁意志": {
+        "color": (150, 150, 180), "glow": (200, 200, 220),
+        "shape": "shield", "border": (100, 100, 130),
     },
 }

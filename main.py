@@ -8,12 +8,13 @@ from settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK,
     SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP,
     ELITE_SIZE, ELITE_SPEED, ELITE_HP,
-    ELITE_CHANCE, ELITE_ACTIVATION,
+    ELITE_CHANCE, ELITE_ACTIVATION, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
     CHARGER_HP, RANGER_HP, EXPLODER_HP,
-    DIFFICULTY_INTERVAL, SPAWN_RATE_FACTOR, HP_BONUS_PER_TIER,
-    FIRE_INTERVAL, MAP_WIDTH, MAP_HEIGHT, XP_PER_ORB, XP_PER_LEVEL,
+    DIFFICULTY_INTERVAL, SPAWN_RATE_FACTOR, HP_BONUS_PER_TIER, DAMAGE_BONUS_PER_TIER,
+    GROWTH_INTERVAL, XP_BONUS_PER_GROWTH,
+    FIRE_INTERVAL, MAP_WIDTH, MAP_HEIGHT, XP_PER_ORB, XP_BASE, XP_DIFF_INCREMENT,
     PLAYER_SPEED, PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
-    PICKUP_RANGE, CRIT_MULTIPLIER, REGEN_KILLS, FROSTBITE_SLOW,
+    PICKUP_RANGE, CRIT_MULTIPLIER, FROSTBITE_SLOW,
     WHITE, GRAY, DARK_GRAY, GOLD, BLUE, RED, GREEN
 )
 
@@ -35,6 +36,42 @@ from ui import (
 
 # 游戏逻辑模块
 from game import GameState, TestModeHandler
+
+
+# ==================== 经验计算函数 ====================
+
+def get_xp_for_level(level):
+    """计算升到指定等级需要的累计经验值
+
+    1-10级: 增量+1 (每级所需: 6,7,8,9,10,11,12,13,14,15)
+    11-20级: 增量+5 (每级所需: 19,24,29,34,39,44,49,54,59,64)
+    21-30级: 增量+9 (每级所需: 73,82,91,100,109,118,127,136,145,154)
+    """
+    if level <= 1:
+        return 0
+    if level == 2:
+        return XP_BASE
+
+    total = XP_BASE  # 1→2级需要的经验
+
+    for l in range(3, level + 1):
+        block_idx = (l - 1) // 10
+        position = (l - 1) % 10
+        # 基础增量: 1, 每10级+4 (1→5→9→...)
+        base_increment = 1 + block_idx * XP_DIFF_INCREMENT
+        # 该级增量: 基础增量 + 位置 * 差值
+        increment = base_increment + position * XP_DIFF_INCREMENT
+        total += increment
+
+    return total
+
+
+def get_level_from_xp(total_xp):
+    """根据累计经验值计算当前等级"""
+    level = 1
+    while get_xp_for_level(level + 1) <= total_xp:
+        level += 1
+    return level
 
 
 # ==================== 辅助函数 ====================
@@ -61,6 +98,7 @@ def _spawn_pos(camera):
 def _spawn_enemy(camera, elapsed_time, difficulty_level):
     x, y = _spawn_pos(camera)
     hp_bonus = difficulty_level * HP_BONUS_PER_TIER
+    damage_bonus = int(elapsed_time / GROWTH_INTERVAL) * DAMAGE_BONUS_PER_TIER
     tier = int(elapsed_time / DIFFICULTY_INTERVAL)
 
     available = [(t, w) for t, w in _ENEMY_WEIGHTS.items()
@@ -71,16 +109,18 @@ def _spawn_enemy(camera, elapsed_time, difficulty_level):
     enemy_type = random.choices(types, weights=weights, k=1)[0]
 
     if enemy_type == "charger":
-        return Charger(x, y, hp=CHARGER_HP + hp_bonus)
+        return Charger(x, y, hp=CHARGER_HP + hp_bonus, damage=1 + damage_bonus)
     elif enemy_type == "ranger":
-        return Ranger(x, y, hp=RANGER_HP + hp_bonus)
+        return Ranger(x, y, hp=RANGER_HP + hp_bonus, damage=1 + damage_bonus)
     elif enemy_type == "exploder":
-        return Exploder(x, y, hp=EXPLODER_HP + hp_bonus)
+        return Exploder(x, y, hp=EXPLODER_HP + hp_bonus, damage=1 + damage_bonus)
 
     if elapsed_time >= ELITE_ACTIVATION and random.random() < ELITE_CHANCE:
-        return Enemy(x, y, hp=ELITE_HP + hp_bonus, speed=ELITE_SPEED,
-                     size=ELITE_SIZE, color=BLUE, is_elite=True, sprite_name="elite")
-    return Enemy(x, y, hp=ENEMY_HP + hp_bonus)
+        elite_hp = int((ELITE_HP + hp_bonus) * ELITE_HP_MULT)
+        return Enemy(x, y, hp=elite_hp, speed=ELITE_SPEED,
+                     size=ELITE_SIZE, color=BLUE, is_elite=True,
+                     sprite_name="elite", contact_damage=int((1 + damage_bonus) * ELITE_DAMAGE_MULT))
+    return Enemy(x, y, hp=ENEMY_HP + hp_bonus, contact_damage=1 + damage_bonus)
 
 
 def _nearest_enemy(player_rect, enemies):
@@ -310,7 +350,7 @@ def main():
             player.update(dt, keys)
             camera.update(player.rect, dt)
 
-            is_moving = keys[pygame.K_w] or keys[pygame.K_a] or keys[pygame.K_s] or keys[pygame.K_d]
+            is_moving = keys[pygame.K_w] or keys[pygame.K_a] or keys[pygame.K_s] or keys[pygame.K_d] or keys[pygame.K_UP] or keys[pygame.K_DOWN] or keys[pygame.K_LEFT] or keys[pygame.K_RIGHT]
 
             # 生成敌人
             game_state.spawn_timer += dt
@@ -343,6 +383,15 @@ def main():
             bullets.update(dt)
             enemy_bullets.update(dt)
 
+            # 冰霜光环 - 周围敌人减速
+            if game_state.stats.get("has_frostbite", 0) > 0:
+                frost_aura_range = 120  # 光环范围
+                for enemy in enemies:
+                    dist = math.hypot(enemy.rect.centerx - player.rect.centerx,
+                                    enemy.rect.centery - player.rect.centery)
+                    if dist < frost_aura_range:
+                        enemy.apply_frostbite(FROSTBITE_SLOW)
+
             # 武器系统 - 旋转利刃
             if game_state.stats.get("has_blades", 0) > 0:
                 blade_mgr.update(dt)
@@ -366,8 +415,10 @@ def main():
 
             # 剧毒地雷
             if game_state.stats.get("has_traps", 0) > 0:
-                trap_interval = 2.0 * (0.85 ** (game_state.stats.get("has_traps", 1) - 1))
-                trap_mgr.update(dt, player, is_moving, trap_interval)
+                trap_interval = game_state.stats.get("trap_interval", 2.0)
+                trap_mgr.update(dt, player, is_moving, trap_interval,
+                              trap_damage=game_state.stats.get("trap_damage", 4),
+                              radius_mult=game_state.stats.get("trap_radius_mult", 1.0))
                 for trap in list(trap_mgr.group):
                     trap.check_enemies(enemies)
 
@@ -417,11 +468,13 @@ def main():
                     if dead:
                         game_state.score = _kill_enemy(enemy, particles, orbs, explosions, game_state.score, audio, fps_smooth)
                         enemy.kill()
-                        if game_state.stats.get("has_regen", 0) > 0:
-                            game_state.stats["regen_kills"] += 1
-                            if game_state.stats["regen_kills"] >= REGEN_KILLS:
-                                game_state.stats["regen_kills"] -= REGEN_KILLS
-                                game_state.player_hp = min(PLAYER_MAX_HP, game_state.player_hp + 1)
+                        # 复苏之风逻辑
+                        if game_state.stats.get("regen_kills", 0) > 0:
+                            required_kills = game_state.stats["regen_kills"]
+                            game_state.stats["regen_kills_progress"] += 1
+                            if game_state.stats["regen_kills_progress"] >= required_kills:
+                                game_state.stats["regen_kills_progress"] = 0
+                                game_state.player_hp = min(game_state.stats["max_hp"], game_state.player_hp + 1)
                     break
 
             # 敌人子弹碰撞
@@ -464,10 +517,11 @@ def main():
             explosions = [e for e in explosions if e.alive]
 
             # 经验球
+            xp_bonus = int(game_state.elapsed_time / GROWTH_INTERVAL) * XP_BONUS_PER_GROWTH
             for orb in list(orbs):
                 orb.update(dt, player.rect, game_state.stats["pickup_range"])
                 if orb.rect.colliderect(player.rect):
-                    game_state.experience += XP_PER_ORB
+                    game_state.experience += XP_PER_ORB + xp_bonus
                     orb.kill()
 
             # 粒子和伤害数字
@@ -478,12 +532,18 @@ def main():
                     damage_numbers.remove(dn)
 
             # 升级
-            xp_to_next = game_state.level * XP_PER_LEVEL
+            xp_for_current = get_xp_for_level(game_state.level)
+            xp_for_next = get_xp_for_level(game_state.level + 1)
+            xp_to_next = xp_for_next - xp_for_current
             if game_state.experience >= xp_to_next:
                 game_state.experience -= xp_to_next
                 game_state.level += 1
                 game_state.paused = True
                 game_state.chosen_skills = get_random_skills(3)
+                # 每次升级增加血量上限和当前血量
+                game_state.stats["max_hp"] += 1
+                game_state.player_hp = min(game_state.player_hp + 1, game_state.stats["max_hp"])
+                player.max_hp = game_state.stats["max_hp"]
                 audio.play_level_up()
 
             # 死亡检查
@@ -531,9 +591,12 @@ def main():
                 dn.draw(screen, camera)
 
             # HUD
-            xp_to_next = game_state.level * XP_PER_LEVEL
+            xp_for_current = get_xp_for_level(game_state.level)
+            xp_for_next = get_xp_for_level(game_state.level + 1)
+            xp_to_next = xp_for_next - xp_for_current
+            current_max_hp = game_state.stats.get("max_hp", PLAYER_MAX_HP)
             draw_hud(screen, font, game_state.level, game_state.experience, xp_to_next,
-                      game_state.player_hp, PLAYER_MAX_HP)
+                      game_state.player_hp, current_max_hp)
             draw_skill_bar(screen, font, game_state.acquired_skills, mouse_pos, game_state.elapsed_time)
 
             # 测试模式面板

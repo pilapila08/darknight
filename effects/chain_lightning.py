@@ -67,9 +67,10 @@ class ChainLightning:
                     best = e
 
             if best:
-                chain_count = LIGHTNING_CHAINS + (stats.get("bullet_count", 1) - 1) + (stats.get("has_lightning", 1) - 1)
+                # 使用stats中的闪电弹跳次数和伤害
+                chain_count = stats.get("lightning_chains", LIGHTNING_CHAINS)
                 chain_count = max(1, chain_count)
-                damage = LIGHTNING_DAMAGE
+                damage = stats.get("lightning_damage", LIGHTNING_DAMAGE)
                 hit_ids = set()
                 current = best
                 prev_pos = (player_rect.centerx, player_rect.centery)
