@@ -25,8 +25,8 @@ def draw_hud(screen, font, level, experience, xp_to_next, player_hp, player_max_
 
     # 生命条
     hp_y = xp_y + bar_height + 4
-    hp_text = font.render("生命", True, WHITE)
-    screen.blit(hp_text, (bar_x - 40, hp_y - 2))
+    hp_text = font.render(f"HP {player_hp}/{player_max_hp}", True, WHITE)
+    screen.blit(hp_text, (bar_x - 80, hp_y - 2))
     pygame.draw.rect(screen, DARK_GRAY, (bar_x, hp_y, bar_width, bar_height))
     hp_fill = int(bar_width * (player_hp / player_max_hp))
     if hp_fill > 0:

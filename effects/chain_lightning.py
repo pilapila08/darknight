@@ -84,9 +84,6 @@ class ChainLightning:
                         final_dmg *= stats.get("crit_multiplier", 2.0)
                     dead = current.take_damage(final_dmg)
                     results.append((current, final_dmg, dead))
-                    # Frostbite
-                    if stats.get("has_frostbite", 0) > 0:
-                        current.apply_frostbite(0.8)
 
                     self.bolts.append(LightningBolt(prev_pos, current.rect.center))
                     hit_ids.add(id(current))

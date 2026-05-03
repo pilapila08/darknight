@@ -6,7 +6,7 @@ from settings import (CHARGER_SPEED, CHARGER_HP, CHARGER_DASH_SPEED,
                       CHARGER_COLOR,
                       RANGER_SPEED, RANGER_HP, RANGER_RANGE,
                       RANGER_FIRE_INTERVAL, RANGER_COLOR,
-                      EXPLODER_SPEED, EXPLODER_HP, EXPLODER_COLOR)
+                      EXPLODER_SPEED, EXPLODER_HP, EXPLODER_DAMAGE, EXPLODER_COLOR)
 
 
 class Charger(Enemy):
@@ -78,8 +78,10 @@ class Ranger(Enemy):
 
 
 class Exploder(Enemy):
-    def __init__(self, x, y, hp=None, damage=None):
+    def __init__(self, x, y, hp=None, damage=None, explosion_damage=None):
         hp = hp if hp is not None else EXPLODER_HP
-        damage = damage if damage is not None else 1
+        damage = damage if damage is not None else 0  # 爆炸怪无接触伤害
         super().__init__(x, y, hp=hp, speed=EXPLODER_SPEED, color=EXPLODER_COLOR, sprite_name="exploder")
         self.contact_damage = damage
+        # 自爆伤害 = 普通怪接触伤害 × 2
+        self.explosion_damage = explosion_damage if explosion_damage is not None else 2

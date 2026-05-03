@@ -3,14 +3,14 @@ from settings import EXPLODER_RADIUS, EXPLODER_DAMAGE, PURPLE
 
 
 class Explosion:
-    def __init__(self, x, y):
+    def __init__(self, x, y, damage=None):
         self.x = x
         self.y = y
         self.radius = 0.0
         self.max_radius = EXPLODER_RADIUS
         self.lifetime = 0.3
         self.elapsed = 0.0
-        self.damage = EXPLODER_DAMAGE
+        self.damage = damage if damage is not None else EXPLODER_DAMAGE
         self._applied = False
 
     def apply_damage(self, player, enemies):

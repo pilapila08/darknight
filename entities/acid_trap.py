@@ -48,16 +48,13 @@ class TrapManager:
         self.timer = 0.0
         self.group = pygame.sprite.Group()
 
-    def update(self, dt, player, is_moving, interval=None, trap_damage=4, radius_mult=1.0):
+    def update(self, dt, player, interval=None, trap_damage=4, radius_mult=1.0):
         if interval is None:
             interval = TRAP_INTERVAL
-        if is_moving:
-            self.timer += dt
-            while self.timer >= interval:
-                self.timer -= interval
-                self.group.add(AcidTrap(player.rect.centerx, player.rect.centery,
-                                        trap_damage=trap_damage, radius_mult=radius_mult))
-        else:
-            self.timer = min(self.timer, interval * 0.5)
+        self.timer += dt
+        while self.timer >= interval:
+            self.timer -= interval
+            self.group.add(AcidTrap(player.rect.centerx, player.rect.centery,
+                                    trap_damage=trap_damage, radius_mult=radius_mult))
 
         self.group.update(dt)

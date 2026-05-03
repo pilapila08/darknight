@@ -1,4 +1,5 @@
 import random
+from settings import FIRE_INTERVAL, PLAYER_SPEED, PLAYER_MAX_HP, CRIT_MULTIPLIER
 
 SKILL_POOL = [
     # Combat stats
@@ -29,20 +30,6 @@ SKILL_POOL = [
     },
     # Functional modifiers
     {
-        "name": "贪婪之魂",
-        "desc": "拾取范围 +50%，受伤 +10%",
-        "key": "pickup_range",
-        "factor": 1.5,
-        "side_effect": ("damage_taken", 1.1, "factor"),
-    },
-    {
-        "name": "冰霜光环",
-        "desc": "周围敌人永久减速 20%",
-        "key": "has_frostbite",
-        "delta": 1,
-        "aura": True,  # 标记为光环技能
-    },
-    {
         "name": "致命节奏",
         "desc": "+15% 暴击率，+0.5 暴击伤害（可叠加）",
         "key": "crit_chance",
@@ -51,7 +38,7 @@ SKILL_POOL = [
     },
     {
         "name": "复苏之风",
-        "desc": "每击杀 20 敌回复 1 HP（可叠加，需敌量×0.8）",
+        "desc": "每击杀 N 敌回复 1 HP（可叠加，需敌量×0.8）",
         "key": "regen_kills",
         "delta": 20,
         "delta_factor": 0.8,
@@ -85,7 +72,7 @@ SKILL_POOL = [
     },
     {
         "name": "剧毒地雷",
-        "desc": "移动时释放毒雷（间隔-0.1s，伤害+0.5/s，范围×1.1）",
+        "desc": "自动释放毒雷（间隔-0.1s，伤害+0.5/s，范围×1.1）",
         "key": "has_traps",
         "delta": 1,
         "base_interval": 2.0,  # 基础释放间隔
@@ -96,6 +83,70 @@ SKILL_POOL = [
         "radius_per_stack": 0.1,  # 每次叠加增加范围
     },
 ]
+
+
+def get_skill_by_name(name):
+    """根据名称获取技能定义"""
+    for skill in SKILL_POOL:
+        if skill["name"] == name:
+            return skill
+    return None
+
+
+def get_skill_effect_desc(skill_name, stats):
+    """根据技能名称和当前属性，生成技能效果描述"""
+    skill = get_skill_by_name(skill_name)
+    if not skill:
+        return ""
+
+    key = skill["key"]
+    count = stats.get(f"{key}_count", 0) if key in ["bullet_damage"] else 0
+
+    # 统计该技能被选了多少次
+    if skill.get("is_arithmetic"):
+        # 等差数列技能
+        current = stats.get(key, 2)
+        return f"伤害 {current}"
+    elif key == "fire_interval":
+        current = stats.get(key, FIRE_INTERVAL)
+        return f"间隔 {current:.2f}s"
+    elif key == "player_speed":
+        current = stats.get(key, PLAYER_SPEED)
+        return f"速度 {current:.0f}"
+    elif key == "bullet_count":
+        current = stats.get(key, 1)
+        return f"弹量 {current}"
+    elif key == "crit_chance":
+        crit = stats.get(key, 0)
+        mult = stats.get("crit_multiplier", CRIT_MULTIPLIER)
+        return f"暴击 {int(crit * 100)}% / {mult:.1f}x"
+    elif key == "regen_kills":
+        current = stats.get(key, 0)
+        return f"击杀{current}回1血" if current > 0 else "未激活"
+    elif key == "damage_taken":
+        current = stats.get(key, 1.0)
+        reduction = (1 - current) * 100
+        return f"减伤 {int(reduction)}%"
+    elif key == "has_blades":
+        if stats.get(key, 0) == 0:
+            return "未激活"
+        count = stats.get(key, 0)
+        blade_count = stats.get("blade_count", 3)
+        blade_damage = stats.get("blade_damage", 10)
+        return f"{blade_count}刃 / DPS{blade_damage * 10:.0f}"
+    elif key == "has_lightning":
+        if stats.get(key, 0) == 0:
+            return "未激活"
+        chains = stats.get("lightning_chains", 8)
+        dmg = stats.get("lightning_damage", 8)
+        return f"{chains}跳 / 伤害{dmg}"
+    elif key == "has_traps":
+        if stats.get(key, 0) == 0:
+            return "未激活"
+        interval = stats.get("trap_interval", 2.0)
+        dmg = stats.get("trap_damage", 4)
+        return f"间隔{interval:.1f}s / {dmg}伤/s"
+    return ""
 
 
 def get_random_skills(n=3):

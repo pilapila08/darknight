@@ -20,7 +20,6 @@ class GameState:
             "bullet_count": 1,
             "pickup_range": PICKUP_RANGE,
             "damage_taken": 1.0,
-            "has_frostbite": 0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
             "regen_kills": 0,        # 复苏之风需要击杀数（0表示未获得）
@@ -79,7 +78,6 @@ class GameState:
             "bullet_count": 1,
             "pickup_range": PICKUP_RANGE,
             "damage_taken": 1.0,
-            "has_frostbite": 0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
             "regen_kills": 0,

@@ -4,7 +4,7 @@ SCREEN_HEIGHT = 720
 FPS = 60
 
 # Debug
-ENABLE_TEST_MODE = False  # 测试模式开关，True=开启，False=关闭
+ENABLE_TEST_MODE = True  # 测试模式开关，True=开启，False=关闭
 
 # World (larger than screen for camera scrolling)
 MAP_WIDTH = 3000
@@ -21,7 +21,8 @@ PLAYER_INVINCIBLE_TIME = 0.4  # seconds after taking damage
 ENEMY_SIZE = 28
 ENEMY_SPEED = 195  # pixels per second (was 130)
 ENEMY_HP = 1
-SPAWN_INTERVAL = 0.47  # seconds (was 0.7, 1.5x faster spawn)
+SPAWN_INTERVAL = 0.65  # seconds (放缓初始刷怪间隔)
+MAX_ENEMIES = 150  # 最多敌人数量（性能优化）
 
 # Elite Enemy
 ELITE_SIZE = 40
@@ -57,15 +58,18 @@ ENEMY_BULLET_RADIUS = 4
 ENEMY_BULLET_SPEED = 180
 
 # Difficulty Scaling
-DIFFICULTY_INTERVAL = 25  # seconds per tier (was 30)
-SPAWN_RATE_FACTOR = 0.83  # spawn interval multiplier per tier (was 0.85)
+DIFFICULTY_INTERVAL = 40  # seconds per tier (放缓难度提升)
+SPAWN_RATE_FACTOR = 0.90  # spawn interval multiplier per tier (放缓刷新加速)
 HP_BONUS_PER_TIER = 1
-DAMAGE_BONUS_PER_TIER = 1  # 每50秒怪物伤害+1
+DAMAGE_BONUS_PER_TIER = 1  # 等差数列增长，每40秒触发：+1, +2, +3... (累计: 0, 1, 3, 6, 10...)
 
 # Time-based Growth
-GROWTH_INTERVAL = 25     # 怪物成长时间间隔（秒）
-XP_GROWTH_INTERVAL = 50  # 经验成长时间间隔（秒）
-XP_BONUS_PER_GROWTH = 0.5  # 每次经验成长+0.5
+GROWTH_INTERVAL = 40     # 怪物成长时间间隔（秒，拉长节奏）
+XP_GROWTH_INTERVAL = 80   # 经验成长时间间隔（秒，拉长节奏）
+XP_BONUS_PER_GROWTH = 0.3  # 每次经验成长+0.3 (降低)
+
+# Game Duration
+GAME_DURATION = 600  # 10分钟游戏时长上限（秒）
 
 # Elite Modifiers
 ELITE_HP_MULT = 2.0       # 精英怪血量倍率
@@ -112,7 +116,6 @@ TRAP_COLOR = (100, 220, 80)
 CRIT_MULTIPLIER = 2.0
 REGEN_KILLS_INITIAL = 20  # 复苏之风初始需要击杀数
 REGEN_KILLS_MIN = 5       # 复苏之风最小击杀数
-FROSTBITE_SLOW = 0.8
 
 # Colors
 BLACK = (0, 0, 0)
