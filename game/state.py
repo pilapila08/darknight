@@ -1,7 +1,8 @@
 """游戏状态管理"""
 from settings import (
     FIRE_INTERVAL, PLAYER_SPEED, PICKUP_RANGE,
-    CRIT_MULTIPLIER, PLAYER_MAX_HP, REGEN_KILLS_INITIAL
+    CRIT_MULTIPLIER, PLAYER_MAX_HP, REGEN_KILLS_INITIAL,
+    ENEMY_HP, ENEMY_SPEED, ENEMY_SIZE, RED
 )
 
 
@@ -50,8 +51,13 @@ class GameState:
         self.invincible_timer = 1.5
         self.menu = True
         self.game_over = False
+        self.escaped = False  # ESC 暂停状态
         self.test_mode = False
         self.test_auto_spawn = False
+        # 测试模式控制
+        self.test_xp_multiplier = 1.0  # 经验倍率（设为0可禁止经验获取）
+        self.test_custom_hp = PLAYER_MAX_HP      # 测试血量设置
+        self.test_custom_max_hp = PLAYER_MAX_HP   # 测试血量上限设置
 
     def apply_skill_update(self, skill, player, blade_mgr=None):
         """应用技能后更新相关状态"""

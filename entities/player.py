@@ -1,5 +1,5 @@
 import pygame
-from settings import MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, WHITE
+from settings import MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, PLAYER_MAX_HP, WHITE
 from entities.animation import Animation
 from effects.asset_loader import load_image
 
@@ -11,6 +11,7 @@ class Player:
         self.rect = pygame.Rect(0, 0, PLAYER_SIZE, PLAYER_SIZE)
         self.rect.center = (MAP_WIDTH // 2, MAP_HEIGHT // 2)
         self.speed = PLAYER_SPEED
+        self.max_hp = PLAYER_MAX_HP  # 血量上限
         self._was_moving = False
 
     def update(self, dt, keys):
