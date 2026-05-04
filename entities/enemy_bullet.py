@@ -4,7 +4,7 @@ from settings import ENEMY_BULLET_RADIUS, ENEMY_BULLET_SPEED, ORANGE
 
 
 class EnemyBullet(pygame.sprite.Sprite):
-    def __init__(self, x, y, target_x, target_y):
+    def __init__(self, x, y, target_x, target_y, damage=1):
         super().__init__()
         size = ENEMY_BULLET_RADIUS * 2
         self.image = pygame.Surface((size, size), pygame.SRCALPHA)
@@ -22,7 +22,7 @@ class EnemyBullet(pygame.sprite.Sprite):
         else:
             self.vx = 0
             self.vy = 0
-        self.damage = 1
+        self.damage = damage  # 使用传入的伤害值，不再硬编码为1
 
     def update(self, dt):
         self.rect.x += self.vx * dt

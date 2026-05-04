@@ -20,12 +20,12 @@ def draw_hud(screen, font, level, experience, xp_to_next, player_hp, player_max_
         pygame.draw.rect(screen, GOLD, (bar_x, xp_y, fill_width, bar_height))
     # 显示当前/总经验
     xp_needed = xp_to_next - experience
-    xp_info_text = font.render(f"{xp_needed}", True, WHITE)
+    xp_info_text = font.render(f"{xp_needed:.2f}", True, WHITE)
     screen.blit(xp_info_text, (bar_x + bar_width + 8, xp_y - 2))
 
     # 生命条
     hp_y = xp_y + bar_height + 4
-    hp_text = font.render(f"HP {player_hp}/{player_max_hp}", True, WHITE)
+    hp_text = font.render(f"HP {player_hp:.2f}/{player_max_hp:.2f}", True, WHITE)
     screen.blit(hp_text, (bar_x - 80, hp_y - 2))
     pygame.draw.rect(screen, DARK_GRAY, (bar_x, hp_y, bar_width, bar_height))
     hp_fill = int(bar_width * (player_hp / player_max_hp))

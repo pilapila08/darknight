@@ -21,6 +21,7 @@ from effects import OrbitalBladeManager, ChainLightning
 from systems import Camera, AudioManager, load_high_score, save_high_score
 from skills import get_random_skills, apply_skill
 from ui import draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection, draw_pause_menu, get_font
+from ui.drawables import get_font as ui_get_font
 
 
 class NormalGame:
@@ -45,6 +46,7 @@ class NormalGame:
         self.fullscreen = False
         self.high_score = load_high_score()
         self.new_record = False
+        self.debug_stats_enabled = False  # 数值显示开关
 
         self.running = True
         self.game_over = False
@@ -163,6 +165,12 @@ class NormalGame:
                     else:
                         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
+            # 数值显示开关点击检测
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                debug_rect = self._get_debug_stats_rect()
+                if debug_rect.collidepoint(event.pos):
+                    self.debug_stats_enabled = not self.debug_stats_enabled
+
     def _apply_skill(self, skill):
         """应用技能"""
         apply_skill(self.game_state.stats, skill)
@@ -183,13 +191,93 @@ class NormalGame:
         quit_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 70, 200, 50)
         return resume_rect, quit_rect
 
+    def _get_debug_stats_rect(self):
+        """获取数值显示开关的点击区域"""
+        return pygame.Rect(10, 10, 80, 24)
+
+    def _get_current_enemy_stats(self):
+        """获取当前游戏时间下各敌人的数值"""
+        growth_count = int(self.game_state.elapsed_time / GROWTH_INTERVAL)
+        total_bonus = growth_count * (growth_count + 1) // 2
+        hp_bonus = total_bonus
+        damage_bonus = total_bonus
+
+        return {
+            "basic": {
+                "hp": ENEMY_HP + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "charger": {
+                "hp": CHARGER_HP + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "ranger": {
+                "hp": RANGER_HP + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "exploder": {
+                "hp": EXPLODER_HP + hp_bonus,
+                "damage": 0,
+                "explosion_damage": (1 + damage_bonus) * 2
+            },
+            "elite": {
+                "hp": int((ELITE_HP + hp_bonus) * ELITE_HP_MULT),
+                "damage": int((1 + damage_bonus) * ELITE_DAMAGE_MULT),
+                "explosion_damage": 0
+            }
+        }
+
+    def _draw_debug_stats_panel(self, mouse_pos):
+        """绘制数值显示面板"""
+        tiny_font = ui_get_font(11)
+
+        # 数值显示开关
+        debug_rect = self._get_debug_stats_rect()
+        debug_hovered = debug_rect.collidepoint(mouse_pos)
+        debug_color = (80, 200, 80) if self.debug_stats_enabled else (150, 150, 150)
+
+        pygame.draw.rect(self.screen, (30, 30, 40), debug_rect, border_radius=4)
+        pygame.draw.rect(self.screen, debug_color, debug_rect, 2 if not debug_hovered else 3, border_radius=4)
+        debug_text = "数值 ON" if self.debug_stats_enabled else "数值 OFF"
+        text = tiny_font.render(debug_text, True, debug_color)
+        text_rect = text.get_rect(center=debug_rect.center)
+        self.screen.blit(text, text_rect)
+
+        # 敌人数值显示
+        if self.debug_stats_enabled:
+            enemy_stats = self._get_current_enemy_stats()
+            stats_y = 42
+            stats_x = 10
+            type_names = {
+                "basic": "基础",
+                "charger": "冲锋",
+                "ranger": "射手",
+                "exploder": "自爆",
+                "elite": "精英"
+            }
+            for enemy_type, stats in enemy_stats.items():
+                name = type_names.get(enemy_type, enemy_type)
+                hp_str = f"{name}: HP{stats['hp']}"
+                if enemy_type == "exploder":
+                    dmg_str = f" 爆炸{stats['explosion_damage']}"
+                elif enemy_type == "ranger":
+                    dmg_str = f" 弹{stats['damage']}"
+                else:
+                    dmg_str = f" 伤{stats['damage']}"
+                stat_text = tiny_font.render(hp_str + dmg_str, True, (200, 200, 200))
+                self.screen.blit(stat_text, (stats_x, stats_y))
+                stats_y += 14
+
     def _update(self, dt):
         """更新游戏逻辑"""
         if self.game_over:
             return
 
-        # ESC 暂停时跳过游戏逻辑
-        if self.game_state.escaped:
+        # ESC 暂停或技能选择时跳过游戏逻辑
+        if self.game_state.escaped or self.game_state.paused:
             return
 
         self.game_state.elapsed_time += dt
@@ -321,16 +409,24 @@ class NormalGame:
             target = self._nearest_enemy()
             if target:
                 bullet_count = self.game_state.stats["bullet_count"]
+                bullet_speed_mult = self.game_state.stats.get("bullet_speed", 1.0)
                 dx = target.rect.centerx - self.player.rect.centerx
                 dy = target.rect.centery - self.player.rect.centery
                 base_angle = math.atan2(dy, dx)
-                spread = 0.26
+                # 敌人占据中间偏左的位置
+                enemy_pos = bullet_count // 2  # 奇数弹：中间；偶数弹：中间偏左
+                # 子弹数量多时使用更大的spread覆盖360度
+                if bullet_count > 21:
+                    spread = (2 * math.pi) / bullet_count  # 360度全覆盖
+                    enemy_pos = 0  # 敌人方向为扇形起点
+                else:
+                    spread = 0.26
                 for i in range(bullet_count):
-                    offset = spread * (i - (bullet_count - 1) / 2) if bullet_count > 1 else 0
+                    offset = spread * (i - enemy_pos)
                     angle = base_angle + offset
                     tx = self.player.rect.centerx + math.cos(angle) * 100
                     ty = self.player.rect.centery + math.sin(angle) * 100
-                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty)))
+                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty), bullet_speed_mult))
             self.audio.play_shoot()
 
     def _update_weapons(self, dt):
@@ -374,7 +470,8 @@ class NormalGame:
             if isinstance(enemy, Ranger) and enemy.wants_to_fire():
                 self.enemy_bullets.add(EnemyBullet(
                     enemy.rect.centerx, enemy.rect.centery,
-                    self.player.rect.centerx, self.player.rect.centery))
+                    self.player.rect.centerx, self.player.rect.centery,
+                    enemy.contact_damage))  # 传递射手伤害值
 
     def _cleanup_offscreen(self):
         """清理离屏子弹"""
@@ -424,6 +521,8 @@ class NormalGame:
     def _damage_enemy(self, bullet, enemy):
         """伤害敌人"""
         dmg = self.game_state.stats["bullet_damage"]
+        # 急速子弹速度达上限后的伤害加成（独立于火力增强）
+        dmg *= self.game_state.stats.get("bullet_speed_damage_mult", 1.0)
         is_crit = random.random() < self.game_state.stats["crit_chance"]
         if is_crit:
             dmg *= self.game_state.stats["crit_multiplier"]
@@ -445,7 +544,8 @@ class NormalGame:
                 self.game_state.stats["regen_kills_progress"] += 1
                 if self.game_state.stats["regen_kills_progress"] >= required_kills:
                     self.game_state.stats["regen_kills_progress"] = 0
-                    self.game_state.player_hp = min(self.game_state.stats["max_hp"], self.game_state.player_hp + 1)
+                    regen_hp = self.game_state.stats.get("regen_hp_amount", 1)
+                    self.game_state.player_hp = min(self.game_state.stats["max_hp"], self.game_state.player_hp + regen_hp)
 
     def _kill_enemy(self, enemy):
         """击杀敌人"""
@@ -454,12 +554,18 @@ class NormalGame:
             self.particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
 
         if enemy.is_elite:
-            xp_gained = 3
+            base_xp = 3
         elif isinstance(enemy, Exploder):
             self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery, enemy.explosion_damage))
-            xp_gained = 1
+            base_xp = 1
         else:
-            xp_gained = 1
+            base_xp = 1
+
+        # 经验获取 = 基础经验 × (1 + 时间加成) × 1.25^(贪婪之魂次数)
+        time_bonus = 1 + (self.game_state.elapsed_time // XP_GROWTH_INTERVAL) * XP_BONUS_PER_GROWTH
+        greedy_count = self.game_state.stats.get("greedy_count", 0)
+        greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
+        xp_gained = base_xp * time_bonus * greedy_mult
 
         self.audio.play_enemy_death()
         self.game_state.score += 1
@@ -596,6 +702,9 @@ class NormalGame:
                  self.game_state.player_hp, current_max_hp, self.game_state.elapsed_time)
         draw_skill_bar(self.screen, self.font, self.game_state.acquired_skills,
                       pygame.mouse.get_pos(), self.game_state.elapsed_time, self.game_state.stats)
+
+        # 数值显示面板
+        self._draw_debug_stats_panel(pygame.mouse.get_pos())
 
         # 技能选择
         if self.game_state.paused and self.game_state.chosen_skills:

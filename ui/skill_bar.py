@@ -104,7 +104,9 @@ def draw_skill_bar(screen, font, acquired_skills, mouse_pos=None, elapsed_time=0
 
     # 绘制悬停技能效果提示
     if hovered_skill and stats:
-        effect_desc = get_skill_effect_desc(hovered_skill, stats)
+        # 获取该技能的选取次数
+        skill_count = skill_counts.get(hovered_skill, 1)
+        effect_desc = get_skill_effect_desc(hovered_skill, stats, skill_count)
         tooltip_y = bar_y - 35
 
         # 提示背景

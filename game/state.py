@@ -23,8 +23,12 @@ class GameState:
             "damage_taken": 1.0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
+            "greedy_count": 0,       # 贪婪之魂计数（经验×1.25^n）
+            "bullet_speed": 1.0,    # 子弹速度倍率
+            "bullet_speed_damage_mult": 1.0,  # 急速子弹速度达上限后的伤害倍率
             "regen_kills": 0,        # 复苏之风需要击杀数（0表示未获得）
             "regen_kills_progress": 0,
+            "regen_hp_amount": 1,    # 复苏之风每次回复血量
             "max_hp": PLAYER_MAX_HP, # 血量上限
             "has_blades": 0,
             "blade_count": 0,  # 刀刃数量
@@ -86,8 +90,12 @@ class GameState:
             "damage_taken": 1.0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
+            "greedy_count": 0,
+            "bullet_speed": 1.0,
+            "bullet_speed_damage_mult": 1.0,
             "regen_kills": 0,
             "regen_kills_progress": 0,
+            "regen_hp_amount": 1,
             "max_hp": PLAYER_MAX_HP,
             "has_blades": 0,
             "blade_count": 0,

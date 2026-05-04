@@ -75,10 +75,19 @@ def get_test_custom_enemy_rects(sw, sh):
     return rects
 
 
+def get_test_debug_rect(sw, sh):
+    """获取调试显示开关的点击区域"""
+    return pygame.Rect(sw - 220, sh - 430, 90, 26)
+
+
 def draw_test_mode_panel(screen, font, mouse_pos, auto_spawn_enabled,
                          player_hp, player_max_hp, xp_multiplier,
-                         custom_hp, custom_speed):
-    """绘制测试模式面板"""
+                         custom_hp, custom_speed, debug_stats_enabled=False,
+                         enemy_stats=None):
+    """绘制测试模式面板
+    debug_stats_enabled: 是否显示敌人数值
+    enemy_stats: 敌人当前数值字典 {type: {hp, damage, explosion_damage}}
+    """
     sw, sh = screen.get_width(), screen.get_height()
     small_font = get_font(11)
     tiny_font = get_font(10)
@@ -86,6 +95,41 @@ def draw_test_mode_panel(screen, font, mouse_pos, auto_spawn_enabled,
     # 测试模式标识
     test_label = font.render("[ 测试模式 ]", True, (100, 255, 100))
     screen.blit(test_label, (10, 10))
+
+    # ============ 调试面板 ============
+    debug_rect = get_test_debug_rect(sw, sh)
+    debug_hovered = debug_rect.collidepoint(mouse_pos)
+    debug_color = (80, 200, 80) if debug_stats_enabled else (150, 150, 150)
+    pygame.draw.rect(screen, (30, 30, 40), debug_rect, border_radius=4)
+    pygame.draw.rect(screen, debug_color, debug_rect, 2 if not debug_hovered else 3, border_radius=4)
+    debug_text = "数值 ON" if debug_stats_enabled else "数值 OFF"
+    text = get_font(10).render(debug_text, True, debug_color)
+    text_rect = text.get_rect(center=debug_rect.center)
+    screen.blit(text, text_rect)
+
+    # ============ 敌人数值显示 ============
+    if debug_stats_enabled and enemy_stats:
+        stats_y = 45
+        stats_x = sw - 220
+        for enemy_type, stats in enemy_stats.items():
+            type_names = {
+                "basic": "基础",
+                "charger": "冲锋",
+                "ranger": "射手",
+                "exploder": "自爆",
+                "elite": "精英"
+            }
+            name = type_names.get(enemy_type, enemy_type)
+            hp_str = f"{name}: HP{stats['hp']}"
+            if enemy_type == "exploder":
+                dmg_str = f" 爆炸{stats['explosion_damage']}"
+            elif enemy_type == "ranger":
+                dmg_str = f" 弹{stats['damage']}"
+            else:
+                dmg_str = f" 伤{stats['damage']}"
+            stat_text = tiny_font.render(hp_str + dmg_str, True, (200, 200, 200))
+            screen.blit(stat_text, (stats_x, stats_y))
+            stats_y += 14
 
     # ============ 玩家控制面板 ============
     panel_x = sw - 220
@@ -241,5 +285,6 @@ def get_test_control_rects(sw, sh):
         "custom_enemy": get_test_custom_enemy_rects(sw, sh),
         "enemy": get_test_enemy_rects(sw, sh),
         "auto_spawn": get_test_auto_spawn_rect(sw, sh),
+        "debug_stats": get_test_debug_rect(sw, sh),
         "skill": get_test_skill_rects(sw, sh),
     }

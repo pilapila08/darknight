@@ -13,5 +13,6 @@ from .test_panel import (
     get_test_auto_spawn_rect,
     get_test_control_rects,
     get_test_player_controls_rect,
-    get_test_custom_enemy_rects
+    get_test_custom_enemy_rects,
+    get_test_debug_rect
 )

@@ -117,6 +117,15 @@ def draw_skill_icon_shape(screen, x, y, size, icon_info):
             (x + 12, y + 14),
         ])
 
+    elif shape == "coin":
+        pygame.draw.circle(screen, color, (cx, cy), size // 3)
+        pygame.draw.circle(screen, glow, (cx, cy), size // 4)
+        pygame.draw.circle(screen, color, (cx, cy), 3)
+
+    elif shape == "arrow_right":
+        points = [(x + 6, cy), (x + size - 10, cy), (x + size - 10, y + 8), (x + size - 4, cy), (x + size - 10, y + size - 8), (x + size - 10, cy)]
+        pygame.draw.polygon(screen, color, points)
+
 
 # 技能图标配置
 SKILL_ICONS = {
@@ -131,6 +140,14 @@ SKILL_ICONS = {
     "凌波微步": {
         "color": (60, 180, 255), "glow": (120, 210, 255),
         "shape": "speed", "border": (40, 140, 200),
+    },
+    "贪婪之魂": {
+        "color": (255, 215, 0), "glow": (255, 245, 150),
+        "shape": "coin", "border": (200, 170, 0),
+    },
+    "急速子弹": {
+        "color": (100, 255, 200), "glow": (180, 255, 230),
+        "shape": "arrow_right", "border": (70, 200, 150),
     },
     "增加弹量": {
         "color": (255, 130, 50), "glow": (255, 180, 100),

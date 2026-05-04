@@ -79,6 +79,7 @@ ELITE_DAMAGE_MULT = 2.0  # 精英怪伤害倍率
 FIRE_INTERVAL = 0.6  # seconds (was 0.8)
 BULLET_RADIUS = 5
 BULLET_SPEED = 450  # pixels per second (was 400)
+MAX_BULLET_SPEED_MULT = 10.0  # 子弹速度倍率上限
 
 # XP / Level
 ORB_RADIUS = 5

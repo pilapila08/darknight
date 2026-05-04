@@ -6,8 +6,9 @@ import pygame
 from settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, GOLD, GREEN, RED, BLUE,
     SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP, ENEMY_SPEED, MAX_ENEMIES,
-    ELITE_SIZE, ELITE_SPEED, ELITE_HP,
-    DIFFICULTY_INTERVAL, GROWTH_INTERVAL, PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
+    ELITE_SIZE, ELITE_SPEED, ELITE_HP, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
+    DIFFICULTY_INTERVAL, GROWTH_INTERVAL, XP_GROWTH_INTERVAL, XP_BONUS_PER_GROWTH,
+    PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
     MAP_WIDTH, MAP_HEIGHT, GAME_DURATION
 )
 from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
@@ -18,7 +19,8 @@ from skills import SKILL_POOL, apply_skill
 from ui import (
     draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection,
     draw_test_mode_panel, get_test_skill_rects, get_test_enemy_rects,
-    get_test_auto_spawn_rect, get_test_control_rects, get_font, draw_pause_menu
+    get_test_auto_spawn_rect, get_test_control_rects, get_test_debug_rect,
+    get_font, draw_pause_menu
 )
 from game.state import GameState
 from game.test_mode import TestModeHandler
@@ -76,6 +78,7 @@ class TestGame:
         self.game_state.test_xp_multiplier = 1.0
         self.game_state.test_custom_hp = PLAYER_MAX_HP
         self.game_state.test_custom_max_hp = PLAYER_MAX_HP
+        self.debug_stats_enabled = False  # 调试数值显示开关
 
     def _create_game_state(self):
         """创建游戏状态"""
@@ -243,6 +246,11 @@ class TestGame:
             self.test_handler.toggle_auto_spawn()
             self.game_state.test_auto_spawn = self.test_handler.auto_spawn
 
+        # 调试数值显示开关
+        debug_rect = get_test_debug_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
+        if debug_rect.collidepoint(pos):
+            self.debug_stats_enabled = not self.debug_stats_enabled
+
     def _apply_skill(self, skill):
         """应用技能"""
         apply_skill(self.game_state.stats, skill)
@@ -268,8 +276,8 @@ class TestGame:
         if self.game_over:
             return
 
-        # ESC 暂停时跳过游戏逻辑
-        if self.game_state.escaped:
+        # ESC 暂停或技能选择时跳过游戏逻辑
+        if self.game_state.escaped or self.game_state.paused:
             return
 
         self.game_state.elapsed_time += dt
@@ -356,12 +364,47 @@ class TestGame:
         elif enemy_type == "ranger":
             return Ranger(x, y, hp=30 + hp_bonus, damage=1 + damage_bonus)
         elif enemy_type == "exploder":
-            return Exploder(x, y, hp=20 + hp_bonus, damage=0, explosion_dmg=(1 + damage_bonus) * 2)
+            return Exploder(x, y, hp=20 + hp_bonus, damage=0, explosion_damage=(1 + damage_bonus) * 2)
 
         if self.game_state.elapsed_time >= 120 and random.random() < 0.05:
             return Enemy(x, y, hp=ELITE_HP + hp_bonus, speed=ELITE_SPEED,
                         size=ELITE_SIZE, color=BLUE, is_elite=True, sprite_name="elite")
         return Enemy(x, y, hp=ENEMY_HP + hp_bonus, contact_damage=1 + damage_bonus)
+
+    def _get_current_enemy_stats(self):
+        """获取当前游戏时间下各敌人的数值"""
+        growth_count = int(self.game_state.elapsed_time / GROWTH_INTERVAL)
+        total_bonus = growth_count * (growth_count + 1) // 2
+        hp_bonus = total_bonus
+        damage_bonus = total_bonus
+
+        return {
+            "basic": {
+                "hp": ENEMY_HP + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "charger": {
+                "hp": 50 + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "ranger": {
+                "hp": 30 + hp_bonus,
+                "damage": 1 + damage_bonus,
+                "explosion_damage": 0
+            },
+            "exploder": {
+                "hp": 20 + hp_bonus,
+                "damage": 0,
+                "explosion_damage": (1 + damage_bonus) * 2
+            },
+            "elite": {
+                "hp": int((ELITE_HP + hp_bonus) * ELITE_HP_MULT),
+                "damage": int((1 + damage_bonus) * ELITE_DAMAGE_MULT),
+                "explosion_damage": 0
+            }
+        }
 
     def _get_spawn_pos(self):
         """获取生成位置"""
@@ -397,16 +440,24 @@ class TestGame:
             target = self._nearest_enemy()
             if target:
                 bullet_count = self.game_state.stats["bullet_count"]
+                bullet_speed_mult = self.game_state.stats.get("bullet_speed", 1.0)
                 dx = target.rect.centerx - self.player.rect.centerx
                 dy = target.rect.centery - self.player.rect.centery
                 base_angle = math.atan2(dy, dx)
-                spread = 0.26
+                # 敌人占据中间偏左的位置
+                enemy_pos = bullet_count // 2  # 奇数弹：中间；偶数弹：中间偏左
+                # 子弹数量多时使用更大的spread覆盖360度
+                if bullet_count > 21:
+                    spread = (2 * math.pi) / bullet_count  # 360度全覆盖
+                    enemy_pos = 0  # 敌人方向为扇形起点
+                else:
+                    spread = 0.26
                 for i in range(bullet_count):
-                    offset = spread * (i - (bullet_count - 1) / 2) if bullet_count > 1 else 0
+                    offset = spread * (i - enemy_pos)
                     angle = base_angle + offset
                     tx = self.player.rect.centerx + math.cos(angle) * 100
                     ty = self.player.rect.centery + math.sin(angle) * 100
-                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty)))
+                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty), bullet_speed_mult))
             self.audio.play_shoot()
 
     def _update_weapons(self, dt):
@@ -450,7 +501,8 @@ class TestGame:
             if isinstance(enemy, Ranger) and enemy.wants_to_fire():
                 self.enemy_bullets.add(EnemyBullet(
                     enemy.rect.centerx, enemy.rect.centery,
-                    self.player.rect.centerx, self.player.rect.centery))
+                    self.player.rect.centerx, self.player.rect.centery,
+                    enemy.contact_damage))  # 传递射手伤害值
 
     def _cleanup_offscreen(self):
         """清理离屏子弹"""
@@ -500,6 +552,8 @@ class TestGame:
     def _damage_enemy(self, bullet, enemy):
         """伤害敌人"""
         dmg = self.game_state.stats["bullet_damage"]
+        # 急速子弹速度达上限后的伤害加成（独立于火力增强）
+        dmg *= self.game_state.stats.get("bullet_speed_damage_mult", 1.0)
         is_crit = random.random() < self.game_state.stats["crit_chance"]
         if is_crit:
             dmg *= self.game_state.stats["crit_multiplier"]
@@ -520,7 +574,8 @@ class TestGame:
                 self.game_state.stats["regen_kills_progress"] += 1
                 if self.game_state.stats["regen_kills_progress"] >= required_kills:
                     self.game_state.stats["regen_kills_progress"] = 0
-                    self.game_state.player_hp = min(self.game_state.stats["max_hp"], self.game_state.player_hp + 1)
+                    regen_hp = self.game_state.stats.get("regen_hp_amount", 1)
+                    self.game_state.player_hp = min(self.game_state.stats["max_hp"], self.game_state.player_hp + regen_hp)
 
     def _kill_enemy(self, enemy):
         """击杀敌人"""
@@ -529,16 +584,22 @@ class TestGame:
             self.particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
 
         if enemy.is_elite:
-            xp_gained = 3
+            base_xp = 3
         elif isinstance(enemy, Exploder):
             self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery, enemy.explosion_damage))
-            xp_gained = 1
+            base_xp = 1
         else:
-            xp_gained = 1
+            base_xp = 1
+
+        # 经验获取 = 基础经验 × (1 + 时间加成) × 1.25^(贪婪之魂次数) × 测试倍率
+        time_bonus = 1 + (self.game_state.elapsed_time // XP_GROWTH_INTERVAL) * XP_BONUS_PER_GROWTH
+        greedy_count = self.game_state.stats.get("greedy_count", 0)
+        greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
+        xp_gained = base_xp * time_bonus * greedy_mult * self.game_state.test_xp_multiplier
 
         self.audio.play_enemy_death()
         self.game_state.score += 1
-        self.game_state.experience += xp_gained * self.game_state.test_xp_multiplier
+        self.game_state.experience += xp_gained
         enemy.kill()
 
     def _damage_player(self, damage, knockback_x, knockback_y):
@@ -680,11 +741,13 @@ class TestGame:
 
         # 测试模式面板
         if not self.game_state.paused and not self.game_state.game_over and not self.game_state.escaped:
+            enemy_stats = self._get_current_enemy_stats()
             draw_test_mode_panel(
                 self.screen, self.font, mouse_pos, self.game_state.test_auto_spawn,
                 self.game_state.player_hp, self.game_state.stats.get("max_hp", PLAYER_MAX_HP),
                 self.game_state.test_xp_multiplier,
-                self.game_state.test_custom_hp, self.game_state.test_custom_speed
+                self.game_state.test_custom_hp, self.game_state.test_custom_speed,
+                self.debug_stats_enabled, enemy_stats
             )
 
         # ESC 暂停菜单
