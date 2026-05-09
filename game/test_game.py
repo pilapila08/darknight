@@ -7,14 +7,20 @@ from settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, BLACK, GOLD, GREEN, RED, BLUE,
     SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP, ENEMY_SPEED, MAX_ENEMIES,
     ELITE_SIZE, ELITE_SPEED, ELITE_HP, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
-    DIFFICULTY_INTERVAL, GROWTH_INTERVAL, XP_GROWTH_INTERVAL, XP_BONUS_PER_GROWTH,
+    DIFFICULTY_INTERVAL, DIFFICULTY_MAX_TIER, HP_BONUS_PER_TIER, DAMAGE_BONUS_PER_TIER,
+    GROWTH_INTERVAL, SPAWN_RATE_CAP,
     PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
-    MAP_WIDTH, MAP_HEIGHT, GAME_DURATION
+    MAP_WIDTH, MAP_HEIGHT, XP_BASE, XP_GROWTH,
+    BOSS_WARNING_DURATION, MAP_TRANSITION_DURATION,
+    SHADOW_MAGE_SHADOW_HP, SHADOW_MAGE_SHADOW_DAMAGE,
+    VOID_LORD_VOIDLING_HP, VOID_LORD_VOIDLING_DAMAGE,
 )
 from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
 from entities import XpOrb, Particle, DamageNumber, Explosion, TrapManager
+from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
 from systems import Camera, AudioManager, load_high_score, save_high_score
+from systems.map_manager import MapManager, MAP_CONFIGS
 from skills import SKILL_POOL, apply_skill
 from ui import (
     draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection,
@@ -22,6 +28,7 @@ from ui import (
     get_test_auto_spawn_rect, get_test_control_rects, get_test_debug_rect,
     get_font, draw_pause_menu
 )
+from ui.boss_hud import draw_boss_hp_bar
 from game.state import GameState
 from game.test_mode import TestModeHandler
 
@@ -72,6 +79,12 @@ class TestGame:
         self.chain_lightning = ChainLightning()
         self.trap_mgr = TrapManager()
         self.fps_smooth = 60.0
+        self.bosses = pygame.sprite.Group()
+        self.boss_projectiles = pygame.sprite.Group()
+        self.area_effects = []
+        self.map_manager = MapManager()
+        self.warning_flash_alpha = 0
+        self.warning_flash_dir = 1
 
         # 测试模式初始值
         self.game_state.test_custom_speed = ENEMY_SPEED
@@ -246,6 +259,26 @@ class TestGame:
             self.test_handler.toggle_auto_spawn()
             self.game_state.test_auto_spawn = self.test_handler.auto_spawn
 
+        # Boss测试按钮
+        from ui.test_panel import get_test_boss_rects
+        from entities.boss import BOSS_CONFIGS
+        boss_rects = get_test_boss_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+        for i, rect in enumerate(boss_rects):
+            if rect.collidepoint(pos):
+                if i < len(BOSS_CONFIGS):
+                    # 生成Boss
+                    boss = self.test_handler.spawn_boss_near_player(i, self.player)
+                    if boss:
+                        self.enemies.add(boss)
+                        self.bosses.add(boss)
+                        self.game_state.boss_active = True
+                else:
+                    # 清屏按钮
+                    for enemy in list(self.enemies):
+                        if not isinstance(enemy, Boss):
+                            enemy.kill()
+                return
+
         # 调试数值显示开关
         debug_rect = get_test_debug_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
         if debug_rect.collidepoint(pos):
@@ -285,19 +318,33 @@ class TestGame:
             self.game_state.invincible_timer -= dt
 
         self.game_state.difficulty_level = int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL)
-        time_factor = self.game_state.elapsed_time / 30
-        current_spawn_interval = SPAWN_INTERVAL / (1 + time_factor * 0.5 + (time_factor * 0.3) ** 2)
+        time_factor = min(self.game_state.elapsed_time / 30, SPAWN_RATE_CAP)
+        current_spawn_interval = SPAWN_INTERVAL / (1 + time_factor * 0.3 + (time_factor * 0.15) ** 2)
 
         keys = pygame.key.get_pressed()
         self.player.update(dt, keys)
         self.camera.update(self.player.rect, dt)
 
-        # 生成敌人（测试模式下受 auto_spawn 控制）
-        self.game_state.spawn_timer += dt
-        while self.game_state.spawn_timer >= current_spawn_interval:
-            self.game_state.spawn_timer -= current_spawn_interval
-            if len(self.enemies) < MAX_ENEMIES and self.test_handler.should_spawn_enemies(True):
-                self.enemies.add(self._spawn_enemy())
+        # 地图更新
+        map_effects = self.map_manager.update(dt, self.player.rect, self.enemies)
+        for eff in map_effects:
+            if eff["type"] == "player_damage":
+                self._damage_player(eff["amount"], 0, 0)
+
+        # Boss检查
+        self._check_boss_spawn()
+
+        # Boss预警更新
+        if self.game_state.boss_warning_active:
+            self._update_boss_warning(dt)
+
+        # 生成敌人（测试模式下受 auto_spawn 控制，预警期间暂停）
+        if not self.game_state.boss_warning_active:
+            self.game_state.spawn_timer += dt
+            while self.game_state.spawn_timer >= current_spawn_interval:
+                self.game_state.spawn_timer -= current_spawn_interval
+                if len(self.enemies) < MAX_ENEMIES and self.test_handler.should_spawn_enemies(True):
+                    self.enemies.add(self._spawn_enemy())
 
         # 自动射击
         self._update_shooting(dt)
@@ -306,6 +353,10 @@ class TestGame:
         self.enemies.update(dt, self.player.rect)
         self.bullets.update(dt)
         self.enemy_bullets.update(dt)
+        self.boss_projectiles.update(dt)
+
+        # Boss更新
+        self._update_bosses(dt)
 
         # 武器系统
         self._update_weapons(dt)
@@ -328,6 +379,9 @@ class TestGame:
         # 经验球
         self._update_orbs()
 
+        # 区域效果更新
+        self._update_area_effects(dt)
+
         # 粒子和伤害数字
         self.particles.update(dt)
         for dn in self.damage_numbers[:]:
@@ -338,26 +392,28 @@ class TestGame:
         # 升级检查
         self._check_level_up()
 
-        # 胜负检查
+        # 游戏结束检查
         self._check_game_end()
 
-    def _spawn_enemy(self):
-        """生成敌人（正常难度）"""
-        x, y = self._get_spawn_pos()
-        growth_count = int(self.game_state.elapsed_time / GROWTH_INTERVAL)
-        total_bonus = growth_count * (growth_count + 1) // 2
-        hp_bonus = total_bonus
-        damage_bonus = total_bonus
-        tier = int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL)
+    def _spawn_enemy(self, enemy_type_override=None, tier_override=None, pos=None):
+        """生成敌人（支持boss召唤覆写）"""
+        x, y = pos if pos else self._get_spawn_pos()
+        tier = tier_override if tier_override is not None else min(
+            int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL), DIFFICULTY_MAX_TIER)
+        hp_bonus = tier * HP_BONUS_PER_TIER
+        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
 
-        enemy_unlock = {"basic": 0, "charger": 1, "ranger": 2, "exploder": 3}
-        enemy_weights = {"basic": 1.0, "charger": 0.4, "ranger": 0.35, "exploder": 0.2}
+        if enemy_type_override:
+            enemy_type = enemy_type_override
+        else:
+            enemy_unlock = {"basic": 0, "charger": 1, "ranger": 2, "exploder": 3}
+            enemy_weights = {"basic": 1.0, "charger": 0.4, "ranger": 0.35, "exploder": 0.2}
 
-        available = [(t, w) for t, w in enemy_weights.items() if enemy_unlock[t] <= tier]
-        if not available:
-            available = [("basic", 1.0)]
-        types, weights = zip(*available)
-        enemy_type = random.choices(types, weights=weights, k=1)[0]
+            available = [(t, w) for t, w in enemy_weights.items() if enemy_unlock[t] <= tier]
+            if not available:
+                available = [("basic", 1.0)]
+            types, weights = zip(*available)
+            enemy_type = random.choices(types, weights=weights, k=1)[0]
 
         if enemy_type == "charger":
             return Charger(x, y, hp=50 + hp_bonus, damage=1 + damage_bonus)
@@ -365,6 +421,12 @@ class TestGame:
             return Ranger(x, y, hp=30 + hp_bonus, damage=1 + damage_bonus)
         elif enemy_type == "exploder":
             return Exploder(x, y, hp=20 + hp_bonus, damage=0, explosion_damage=(1 + damage_bonus) * 2)
+        elif enemy_type == "shadow":
+            return Enemy(x, y, hp=SHADOW_MAGE_SHADOW_HP, speed=ENEMY_SPEED,
+                         size=ENEMY_SIZE, color=(100, 0, 150), contact_damage=SHADOW_MAGE_SHADOW_DAMAGE)
+        elif enemy_type == "voidling":
+            return Enemy(x, y, hp=VOID_LORD_VOIDLING_HP, speed=ENEMY_SPEED * 1.2,
+                         size=ENEMY_SIZE, color=(180, 0, 200), contact_damage=VOID_LORD_VOIDLING_DAMAGE)
 
         if self.game_state.elapsed_time >= 120 and random.random() < 0.05:
             return Enemy(x, y, hp=ELITE_HP + hp_bonus, speed=ELITE_SPEED,
@@ -372,11 +434,10 @@ class TestGame:
         return Enemy(x, y, hp=ENEMY_HP + hp_bonus, contact_damage=1 + damage_bonus)
 
     def _get_current_enemy_stats(self):
-        """获取当前游戏时间下各敌人的数值"""
-        growth_count = int(self.game_state.elapsed_time / GROWTH_INTERVAL)
-        total_bonus = growth_count * (growth_count + 1) // 2
-        hp_bonus = total_bonus
-        damage_bonus = total_bonus
+        """获取当前游戏时间下各敌人的数值（线性+上限）"""
+        tier = min(int(self.game_state.elapsed_time / GROWTH_INTERVAL), DIFFICULTY_MAX_TIER)
+        hp_bonus = tier * HP_BONUS_PER_TIER
+        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
 
         return {
             "basic": {
@@ -523,6 +584,23 @@ class TestGame:
                 self._damage_enemy(bullet, enemy)
                 break
 
+        # 子弹碰撞Boss
+        for bullet in list(self.bullets):
+            for boss in self.bosses:
+                if bullet.rect.colliderect(boss.rect):
+                    self._damage_enemy(bullet, boss)
+                    bullet.kill()
+                    break
+
+        # Boss弹幕碰撞玩家
+        if self.game_state.invincible_timer <= 0:
+            for bp in list(self.boss_projectiles):
+                if bp.rect.colliderect(self.player.rect):
+                    self._damage_player(bp.damage, bp.rect.centerx, bp.rect.centery)
+                    self.camera.shake(0.15, 6)
+                    bp.kill()
+                    break
+
         # 敌人子弹碰撞玩家
         if self.game_state.invincible_timer <= 0:
             for eb in list(self.enemy_bullets):
@@ -544,6 +622,13 @@ class TestGame:
                     if dist > 0:
                         enemy.rect.x += (dx / dist) * 30
                         enemy.rect.y += (dy / dist) * 30
+                    break
+
+            # Boss接触玩家
+            for boss in self.bosses:
+                if boss.rect.colliderect(self.player.rect) and boss.contact_damage > 0:
+                    self._damage_player(boss.contact_damage, boss.rect.centerx, boss.rect.centery)
+                    self.camera.shake(0.25, 10)
                     break
 
         # 爆炸
@@ -579,6 +664,10 @@ class TestGame:
 
     def _kill_enemy(self, enemy):
         """击杀敌人"""
+        if isinstance(enemy, Boss):
+            self._kill_boss(enemy)
+            return
+
         count = max(1, int(random.randint(5, 8) * min(1.0, self.fps_smooth / 55.0)))
         for _ in range(count):
             self.particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
@@ -591,11 +680,9 @@ class TestGame:
         else:
             base_xp = 1
 
-        # 经验获取 = 基础经验 × (1 + 时间加成) × 1.25^(贪婪之魂次数) × 测试倍率
-        time_bonus = 1 + (self.game_state.elapsed_time // XP_GROWTH_INTERVAL) * XP_BONUS_PER_GROWTH
         greedy_count = self.game_state.stats.get("greedy_count", 0)
         greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
-        xp_gained = base_xp * time_bonus * greedy_mult * self.game_state.test_xp_multiplier
+        xp_gained = base_xp * greedy_mult * self.game_state.test_xp_multiplier
 
         self.audio.play_enemy_death()
         self.game_state.score += 1
@@ -643,33 +730,21 @@ class TestGame:
             self.game_state.level += 1
             self.game_state.paused = True
             self.game_state.chosen_skills = self._get_random_skills(3)
-            self.game_state.stats["max_hp"] += 1
-            self.game_state.player_hp = min(self.game_state.player_hp + 1, self.game_state.stats["max_hp"])
+            self.game_state.stats["max_hp"] += 2
+            self.game_state.player_hp = min(self.game_state.player_hp + 3, self.game_state.stats["max_hp"])
             self.player.max_hp = self.game_state.stats["max_hp"]
             self.audio.play_level_up()
 
     def _get_xp_for_level(self, level):
-        """计算升到指定等级需要的累计经验值"""
-        XP_BASE = 10
-        XP_DIFF_INCREMENT = 12
+        """计算升到指定等级需要的累计经验值 (几何增长，每级×1.1)"""
         if level <= 1:
             return 0
-        if level == 2:
-            return XP_BASE
-
-        total = XP_BASE
-        for l in range(3, min(level + 1, 31)):
-            block_idx = (l - 2) // 10
-            position = (l - 2) % 10
-            level_increment = XP_BASE + block_idx * 10 + position * (XP_DIFF_INCREMENT - 3 + block_idx * XP_DIFF_INCREMENT)
-            total += level_increment
-
-        if level > 30:
-            last_needed = self._get_xp_for_level(30) - self._get_xp_for_level(29)
-            for l in range(31, level + 1):
-                last_needed = int(last_needed * 1.1)
-                total += last_needed
-        return total
+        result = 0
+        needed = float(XP_BASE)
+        for l in range(2, level + 1):
+            result += int(needed)
+            needed *= XP_GROWTH
+        return result
 
     def _get_random_skills(self, count):
         """随机获取技能"""
@@ -677,15 +752,8 @@ class TestGame:
         return original_get_random_skills(count)
 
     def _check_game_end(self):
-        """检查游戏结束"""
-        if self.game_state.elapsed_time >= GAME_DURATION:
-            self.game_state.game_over = True
-            self.game_over = True
-            self.new_record = save_high_score(self.game_state.score)
-            if self.new_record:
-                self.high_score = self.game_state.score
-            self.is_victory = True
-        elif self.game_state.player_hp <= 0:
+        """检查游戏结束（仅死亡）"""
+        if self.game_state.player_hp <= 0:
             self.game_state.game_over = True
             self.game_over = True
             self.new_record = save_high_score(self.game_state.score)
@@ -696,8 +764,7 @@ class TestGame:
     def _render(self):
         """渲染"""
         mouse_pos = pygame.mouse.get_pos()
-        self.screen.fill(BLACK)
-        self.camera.draw_grid(self.screen)
+        self.map_manager.draw_background(self.screen, self.camera)
 
         # 陷阱
         if self.game_state.stats.get("has_traps", 0) > 0:
@@ -708,14 +775,23 @@ class TestGame:
         self.player.draw(self.screen, self.camera)
         for enemy in self.enemies:
             self.screen.blit(enemy.image, self.camera.apply(enemy.rect))
+        for boss in self.bosses:
+            boss.draw(self.screen, self.camera)
+            boss.draw_hp_bar_bg(self.screen, self.dmg_font, self.camera)
         for bullet in self.bullets:
             self.screen.blit(bullet.image, self.camera.apply(bullet.rect))
         for eb in self.enemy_bullets:
             self.screen.blit(eb.image, self.camera.apply(eb.rect))
+        for bp in self.boss_projectiles:
+            self.screen.blit(bp.image, self.camera.apply(bp.rect))
         for orb in self.orbs:
             self.screen.blit(orb.image, self.camera.apply(orb.rect))
         for particle in self.particles:
             self.screen.blit(particle.image, self.camera.apply(particle.rect))
+
+        # 区域效果
+        for ae in self.area_effects:
+            ae.draw(self.screen, self.camera)
 
         # 武器特效
         if self.game_state.stats.get("has_blades", 0) > 0:
@@ -729,6 +805,10 @@ class TestGame:
         for dn in self.damage_numbers:
             dn.draw(self.screen, self.camera)
 
+        # Boss预警渲染
+        if self.game_state.boss_warning_active:
+            self._render_boss_warning()
+
         # HUD
         xp_for_current = self._get_xp_for_level(self.game_state.level)
         xp_for_next = self._get_xp_for_level(self.game_state.level + 1)
@@ -738,6 +818,12 @@ class TestGame:
                  self.game_state.player_hp, current_max_hp, self.game_state.elapsed_time)
         draw_skill_bar(self.screen, self.font, self.game_state.acquired_skills,
                       mouse_pos, self.game_state.elapsed_time, self.game_state.stats)
+
+        # Boss血条
+        if self.game_state.boss_active:
+            for boss in self.bosses:
+                draw_boss_hp_bar(self.screen, self.font, boss)
+                break
 
         # 测试模式面板
         if not self.game_state.paused and not self.game_state.game_over and not self.game_state.escaped:
@@ -749,6 +835,10 @@ class TestGame:
                 self.game_state.test_custom_hp, self.game_state.test_custom_speed,
                 self.debug_stats_enabled, enemy_stats
             )
+
+        # 地图过渡
+        if self.map_manager.transition_active:
+            self._render_map_transition()
 
         # ESC 暂停菜单
         if self.game_state.escaped:
@@ -776,5 +866,164 @@ class TestGame:
         player_dps = self.game_state.stats["bullet_damage"] * self.game_state.stats["bullet_count"] / self.game_state.stats["fire_interval"]
         time_str = f"{self.game_state.elapsed_time:.0f}s"
         bc = self.game_state.stats["bullet_count"]
-        title = f"[测试] 击杀:{self.game_state.score} | DPS:{player_dps:.0f} | {time_str} | 难度{self.game_state.difficulty_level} | 刀:{bc+1}"
+        map_name = self.map_manager.map_data["name"]
+        title = f"[测试] 击杀:{self.game_state.score} | DPS:{player_dps:.0f} | {time_str} | {map_name} | 刀:{bc+1}"
         pygame.display.set_caption(title)
+
+    # --- Boss System (mirrored from NormalGame) ---
+
+    def _check_boss_spawn(self):
+        if self.game_state.boss_active or self.game_state.boss_warning_active:
+            return
+        if self.game_state.boss_defeated_count >= len(BOSS_CONFIGS):
+            return
+        next_config = BOSS_CONFIGS[self.game_state.boss_defeated_count]
+        if self.game_state.elapsed_time >= next_config["spawn_time"]:
+            self._trigger_boss_warning(next_config)
+
+    def _trigger_boss_warning(self, config):
+        self.game_state.boss_warning_active = True
+        self.game_state.boss_warning_timer = BOSS_WARNING_DURATION
+        self._pending_boss_config = config
+        self.warning_flash_alpha = 0
+        self.warning_flash_dir = 1
+        self._boss_clear_done = False
+
+    def _update_boss_warning(self, dt):
+        self.game_state.boss_warning_timer -= dt
+        self.warning_flash_alpha += 120 * dt * self.warning_flash_dir
+        if self.warning_flash_alpha >= 80:
+            self.warning_flash_alpha = 80
+            self.warning_flash_dir = -1
+        elif self.warning_flash_alpha <= 0:
+            self.warning_flash_alpha = 0
+            self.warning_flash_dir = 1
+
+        if self.game_state.boss_warning_timer <= BOSS_WARNING_DURATION - 1.5 and not self._boss_clear_done:
+            self._boss_clear_done = True
+            for enemy in list(self.enemies):
+                if not isinstance(enemy, Boss):
+                    self._kill_enemy(enemy)
+
+        if self.game_state.boss_warning_timer <= 0:
+            self.game_state.boss_warning_active = False
+            config = self._pending_boss_config
+            angle = random.uniform(0, math.pi * 2)
+            dist = random.randint(200, 400)
+            bx = self.player.rect.centerx + int(math.cos(angle) * dist)
+            by = self.player.rect.centery + int(math.sin(angle) * dist)
+            bx = max(50, min(MAP_WIDTH - 50, bx))
+            by = max(50, min(MAP_HEIGHT - 50, by))
+            boss = config["cls"](bx, by)
+            self.enemies.add(boss)
+            self.bosses.add(boss)
+            self.game_state.boss_active = True
+            self._pending_boss_config = None
+
+    def _update_bosses(self, dt):
+        for boss in list(self.bosses):
+            attacks = boss.update(dt, self.player.rect)
+            if attacks:
+                self._process_boss_attacks(attacks)
+            if boss.hp <= 0:
+                self._kill_boss(boss)
+
+    def _process_boss_attacks(self, attacks):
+        for atk in attacks:
+            atk_type = atk.get("type")
+            if atk_type == "projectile":
+                bp = BossProjectile(atk["x"], atk["y"], atk["tx"], atk["ty"],
+                                    atk.get("speed", 300), atk["damage"],
+                                    atk.get("color", (200, 50, 50)),
+                                    atk.get("radius", 6))
+                self.boss_projectiles.add(bp)
+            elif atk_type == "boomerang":
+                bf = BoomerangFist(atk["x"], atk["y"], atk["tx"], atk["ty"],
+                                   atk["sender_rect"], atk["damage"],
+                                   atk.get("color", (150, 150, 170)),
+                                   atk.get("radius", 12))
+                self.boss_projectiles.add(bf)
+            elif atk_type == "aoe":
+                ae = AreaEffect(atk["x"], atk["y"], atk["radius"],
+                                atk["duration"], atk["damage"],
+                                atk.get("color", (100, 200, 100)))
+                self.area_effects.append(ae)
+            elif atk_type == "summon":
+                for _ in range(atk.get("count", 1)):
+                    angle = random.uniform(0, math.pi * 2)
+                    dist = random.randint(30, 80)
+                    sx = atk.get("x", self.player.rect.centerx) + int(math.cos(angle) * dist)
+                    sy = atk.get("y", self.player.rect.centery) + int(math.sin(angle) * dist)
+                    sx = max(50, min(MAP_WIDTH - 50, sx))
+                    sy = max(50, min(MAP_HEIGHT - 50, sy))
+                    self.enemies.add(self._spawn_enemy(enemy_type_override=atk.get("enemy_type", "basic"),
+                                                       tier_override=atk.get("tier", 0), pos=(sx, sy)))
+            elif atk_type == "shockwave":
+                for angle in [0, math.pi / 2, math.pi, math.pi * 3 / 2]:
+                    tx = atk["x"] + math.cos(angle) * 200
+                    ty = atk["y"] + math.sin(angle) * 200
+                    bp = BossProjectile(atk["x"], atk["y"], tx, ty,
+                                        atk.get("speed", 300), atk["damage"],
+                                        (200, 200, 100), radius=8, lifetime=0.8)
+                    self.boss_projectiles.add(bp)
+            elif atk_type == "gravity":
+                pass
+
+    def _kill_boss(self, boss):
+        for _ in range(30):
+            self.particles.add(Particle(boss.rect.centerx, boss.rect.centery,
+                                        boss.config.get("color", (255, 50, 50))))
+        self.camera.shake(0.5, 15)
+        greedy_count = self.game_state.stats.get("greedy_count", 0)
+        greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
+        self.game_state.experience += int(20 * greedy_mult * self.game_state.test_xp_multiplier)
+        self.game_state.score += 50
+        boss.kill()
+        self.bosses.remove(boss)
+        self.game_state.boss_active = False
+        self.game_state.boss_defeated_count += 1
+        self._trigger_map_transition()
+
+    def _trigger_map_transition(self):
+        next_map = self.game_state.boss_defeated_count
+        if next_map < len(MAP_CONFIGS):
+            self.map_manager.switch_to_map(next_map)
+
+    def _update_area_effects(self, dt):
+        for ae in list(self.area_effects):
+            ae.update(dt)
+            if ae.expired:
+                self.area_effects.remove(ae)
+                continue
+            if ae.should_tick() and ae.contains_point(self.player.rect.centerx, self.player.rect.centery):
+                self._damage_player(ae.damage, 0, 0)
+
+    def _render_boss_warning(self):
+        config = getattr(self, '_pending_boss_config', None)
+        if not config:
+            return
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        flash_color = config.get("color", (255, 50, 50))
+        alpha = int(self.warning_flash_alpha)
+        overlay.fill((*flash_color, min(60, alpha)))
+        pygame.draw.rect(overlay, (*flash_color, alpha), (0, 0, SCREEN_WIDTH, 4))
+        pygame.draw.rect(overlay, (*flash_color, alpha), (0, SCREEN_HEIGHT - 4, SCREEN_WIDTH, 4))
+        pygame.draw.rect(overlay, (*flash_color, alpha), (0, 0, 4, SCREEN_HEIGHT))
+        pygame.draw.rect(overlay, (*flash_color, alpha), (SCREEN_WIDTH - 4, 0, 4, SCREEN_HEIGHT))
+        self.screen.blit(overlay, (0, 0))
+        warn_text = f"!! 警告 : {config['name']} 即将到来 !!"
+        text_surf = self.big_font.render(warn_text, True, GOLD)
+        text_rect = text_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        shadow_surf = self.big_font.render(warn_text, True, RED)
+        self.screen.blit(shadow_surf, text_rect.move(2, 2))
+        self.screen.blit(text_surf, text_rect)
+
+    def _render_map_transition(self):
+        alpha = int(200 * min(1.0, self.map_manager.transition_timer / MAP_TRANSITION_DURATION))
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, alpha))
+        self.screen.blit(overlay, (0, 0))
+        text = self.map_manager.transition_text
+        text_surf = self.big_font.render(text, True, GOLD)
+        text_rect = text_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        self.screen.blit(text_surf, text_rect)

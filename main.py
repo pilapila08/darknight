@@ -5,6 +5,7 @@ from ui import draw_start_screen, handle_start_screen_input, get_font
 from game import NormalGame, TestGame
 
 
+
 def _ensure_pygame_ready():
     """确保 pygame 已正确初始化"""
     if not pygame.get_init():

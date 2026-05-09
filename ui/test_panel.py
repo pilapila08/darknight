@@ -80,6 +80,26 @@ def get_test_debug_rect(sw, sh):
     return pygame.Rect(sw - 220, sh - 430, 90, 26)
 
 
+def get_test_boss_rects(sw, sh):
+    """获取Boss测试按钮的点击区域"""
+    from entities.boss import BOSS_CONFIGS
+    rects = []
+    btn_w, btn_h = 75, 28
+    start_x = 15
+    start_y = 460  # 敌人生成按钮下方
+    for i, config in enumerate(BOSS_CONFIGS):
+        rects.append(pygame.Rect(start_x, start_y + i * (btn_h + 5), btn_w, btn_h))
+    # 清屏按钮
+    rects.append(pygame.Rect(start_x, start_y + len(BOSS_CONFIGS) * (btn_h + 5), btn_w, btn_h))
+    return rects
+
+
+def get_test_clear_enemies_rect(sw, sh):
+    """获取清屏按钮的点击区域"""
+    boss_rects = get_test_boss_rects(sw, sh)
+    return boss_rects[-1]  # 最后一个就是清屏按钮
+
+
 def draw_test_mode_panel(screen, font, mouse_pos, auto_spawn_enabled,
                          player_hp, player_max_hp, xp_multiplier,
                          custom_hp, custom_speed, debug_stats_enabled=False,
@@ -277,6 +297,30 @@ def draw_test_mode_panel(screen, font, mouse_pos, auto_spawn_enabled,
     text_rect = text.get_rect(center=auto_rect.center)
     screen.blit(text, text_rect)
 
+    # ============ Boss 测试面板 ============
+    from entities.boss import BOSS_CONFIGS
+    boss_title = font.render("Boss测试:", True, (255, 180, 80))
+    screen.blit(boss_title, (15, 435))
+
+    boss_rects = get_test_boss_rects(sw, sh)
+    boss_colors = [
+        (40, 80, 20),     # 尸王 - dark green
+        (100, 0, 150),    # 暗影巫师 - purple
+        (150, 150, 170),  # 钢铁巨像 - gray
+        (180, 0, 200),    # 虚空之主 - bright purple
+        (200, 60, 60),    # 清屏 - red
+    ]
+    boss_names = [c["name"] for c in BOSS_CONFIGS] + ["清屏"]
+    for i, (name, color) in enumerate(zip(boss_names, boss_colors)):
+        rect = boss_rects[i]
+        hovered = rect.collidepoint(mouse_pos)
+        bg_color = (30, 25, 35) if not hovered else (50, 45, 60)
+        pygame.draw.rect(screen, bg_color, rect, border_radius=4)
+        pygame.draw.rect(screen, color, rect, 1 if not hovered else 2, border_radius=4)
+        text = get_font(11).render(name, True, color)
+        text_rect = text.get_rect(center=rect.center)
+        screen.blit(text, text_rect)
+
 
 def get_test_control_rects(sw, sh):
     """获取测试模式控制按钮的区域（供main.py事件处理使用）"""
@@ -287,4 +331,5 @@ def get_test_control_rects(sw, sh):
         "auto_spawn": get_test_auto_spawn_rect(sw, sh),
         "debug_stats": get_test_debug_rect(sw, sh),
         "skill": get_test_skill_rects(sw, sh),
+        "boss": get_test_boss_rects(sw, sh),
     }

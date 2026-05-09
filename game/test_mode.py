@@ -1,4 +1,5 @@
 """测试模式处理器"""
+import math
 import random
 from settings import (
     MAP_WIDTH, MAP_HEIGHT, ELITE_HP, ELITE_SPEED,
@@ -59,6 +60,19 @@ class TestModeHandler:
 
         enemies.add(Enemy(spawn_x, spawn_y, hp=hp, speed=speed,
                           size=size, color=color, is_elite=False))
+
+    def spawn_boss_near_player(self, boss_index, player):
+        """在玩家附近生成指定Boss"""
+        from entities.boss import BOSS_CLASSES
+        if boss_index >= len(BOSS_CLASSES):
+            return None
+        angle = random.uniform(0, math.pi * 2)
+        dist = random.randint(200, 400)
+        bx = player.rect.centerx + int(math.cos(angle) * dist)
+        by = player.rect.centery + int(math.sin(angle) * dist)
+        bx = max(50, min(MAP_WIDTH - 50, bx))
+        by = max(50, min(MAP_HEIGHT - 50, by))
+        return BOSS_CLASSES[boss_index](bx, by)
 
     def toggle_auto_spawn(self):
         """切换自动生成状态"""
