@@ -58,6 +58,11 @@ class GameState:
         self.escaped = False  # ESC 暂停状态
         self.test_mode = False
         self.test_auto_spawn = False
+        # Boss state
+        self.boss_active = False
+        self.boss_defeated_count = 0
+        self.boss_warning_active = False
+        self.boss_warning_timer = 0.0
         # 测试模式控制
         self.test_xp_multiplier = 1.0  # 经验倍率（设为0可禁止经验获取）
         self.test_custom_hp = PLAYER_MAX_HP      # 测试血量设置

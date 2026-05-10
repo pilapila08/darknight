@@ -6,6 +6,7 @@ from .start_screen import draw_start_screen, handle_start_screen_input
 from .game_over import draw_game_over_screen
 from .skill_select import draw_skill_selection
 from .pause_menu import draw_pause_menu
+from .boss_hud import draw_boss_hp_bar
 from .test_panel import (
     draw_test_mode_panel,
     get_test_skill_rects,

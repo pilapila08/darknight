@@ -1,6 +1,6 @@
 import random
 import pygame
-from settings import SCREEN_WIDTH, SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT, GRID_SIZE, GRAY
+from settings import SCREEN_WIDTH, SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT
 
 
 class Camera:
@@ -29,12 +29,3 @@ class Camera:
 
     def apply(self, rect):
         return rect.move(-self.offset.x, -self.offset.y)
-
-    def draw_grid(self, screen):
-        start_x = int(self.offset.x % GRID_SIZE)
-        start_y = int(self.offset.y % GRID_SIZE)
-
-        for x in range(-start_x, SCREEN_WIDTH, GRID_SIZE):
-            pygame.draw.line(screen, GRAY, (x, 0), (x, SCREEN_HEIGHT))
-        for y in range(-start_y, SCREEN_HEIGHT, GRID_SIZE):
-            pygame.draw.line(screen, GRAY, (0, y), (SCREEN_WIDTH, y))

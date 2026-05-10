@@ -10,3 +10,4 @@ from .damage_number import DamageNumber
 from .explosion import Explosion
 from .animation import Animation
 from .acid_trap import TrapManager
+from .boss import Boss, BossProjectile, AreaEffect, BOSS_CONFIGS, BoomerangFist
