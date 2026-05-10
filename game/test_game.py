@@ -91,7 +91,12 @@ class TestGame:
         self.game_state.test_xp_multiplier = 1.0
         self.game_state.test_custom_hp = PLAYER_MAX_HP
         self.game_state.test_custom_max_hp = PLAYER_MAX_HP
+        self.game_state.test_custom_damage = 1  # 自定义敌人伤害
         self.debug_stats_enabled = False  # 调试数值显示开关
+        self.enemy_panel_expanded = False  # 敌人生成面板是否展开
+        self.boss_panel_expanded = False  # Boss测试面板是否展开
+        self.active_input_field = None  # 当前激活的输入框 (None, "hp", "damage", "speed")
+        self.custom_enemy_type = 0  # 自定义敌人类型索引 (0-4)
 
     def _create_game_state(self):
         """创建游戏状态"""
@@ -125,6 +130,44 @@ class TestGame:
             if event.type == pygame.QUIT:
                 self.running = False
                 return
+
+            # 文本输入（输入框激活时）
+            if self.active_input_field is not None:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN:
+                        self.active_input_field = None
+                    elif event.key == pygame.K_BACKSPACE:
+                        if self.active_input_field == "hp":
+                            self.game_state.test_custom_hp = max(1, self.game_state.test_custom_hp // 10)
+                        elif self.active_input_field == "damage":
+                            self.game_state.test_custom_damage = max(1, self.game_state.test_custom_damage // 10)
+                        elif self.active_input_field == "speed":
+                            self.game_state.test_custom_speed = max(10, self.game_state.test_custom_speed // 10)
+                    elif event.key == pygame.K_MINUS:
+                        pass  # 忽略负号
+                    else:
+                        char = event.unicode
+                        if char.isdigit():
+                            value = int(char)
+                            if self.active_input_field == "hp":
+                                self.game_state.test_custom_hp = min(99999, self.game_state.test_custom_hp * 10 + value)
+                            elif self.active_input_field == "damage":
+                                self.game_state.test_custom_damage = min(99999, self.game_state.test_custom_damage * 10 + value)
+                            elif self.active_input_field == "speed":
+                                self.game_state.test_custom_speed = min(9999, self.game_state.test_custom_speed * 10 + value)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    # 点击其他地方取消输入
+                    all_rects = get_test_control_rects(SCREEN_WIDTH, SCREEN_HEIGHT, self.enemy_panel_expanded)
+                    enemy_rects = all_rects["custom_enemy"]
+                    input_rects = ["hp_input", "damage_input", "speed_input"]
+                    clicked_input = False
+                    for field in input_rects:
+                        if field in enemy_rects and enemy_rects[field].collidepoint(event.pos):
+                            clicked_input = True
+                            break
+                    if not clicked_input:
+                        self.active_input_field = None
+                continue
 
             # 游戏结束
             if self.game_over:
@@ -194,7 +237,7 @@ class TestGame:
 
     def _handle_test_mode_click(self, pos):
         """处理测试模式面板点击"""
-        all_rects = get_test_control_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
+        all_rects = get_test_control_rects(SCREEN_WIDTH, SCREEN_HEIGHT, self.enemy_panel_expanded, self.boss_panel_expanded)
         player_rects = all_rects["player"]
         enemy_rects = all_rects["custom_enemy"]
 
@@ -225,18 +268,52 @@ class TestGame:
         elif "add_xp_500" in player_rects and player_rects["add_xp_500"].collidepoint(pos):
             self.game_state.experience += 500
 
-        # 自定义敌人生成
-        elif enemy_rects["hp_minus"].collidepoint(pos):
+        # 敌人生成面板折叠/展开按钮
+        elif all_rects["enemy_toggle"].collidepoint(pos):
+            self.enemy_panel_expanded = not self.enemy_panel_expanded
+            return  # 重新获取rects
+
+        # Boss测试面板折叠/展开按钮
+        elif all_rects["boss_toggle"].collidepoint(pos):
+            self.boss_panel_expanded = not self.boss_panel_expanded
+            return  # 重新获取rects
+
+        # 重新获取更新后的rects
+        if self.enemy_panel_expanded:
+            all_rects = get_test_control_rects(SCREEN_WIDTH, SCREEN_HEIGHT, self.enemy_panel_expanded, self.boss_panel_expanded)
+            enemy_rects = all_rects["custom_enemy"]
+
+        # 自定义敌人类型选择
+        for i in range(5):
+            if enemy_rects[f"type_{i}"].collidepoint(pos):
+                self.custom_enemy_type = i
+                return
+
+        # 自定义敌人生成（HP、伤害、速度）
+        if enemy_rects["hp_minus"].collidepoint(pos):
             self.game_state.test_custom_hp = max(1, self.game_state.test_custom_hp - 1)
         elif enemy_rects["hp_plus"].collidepoint(pos):
             self.game_state.test_custom_hp += 1
+        elif enemy_rects["hp_input"].collidepoint(pos):
+            self.active_input_field = "hp"
+        elif enemy_rects["damage_minus"].collidepoint(pos):
+            self.game_state.test_custom_damage = max(1, self.game_state.test_custom_damage - 1)
+        elif enemy_rects["damage_plus"].collidepoint(pos):
+            self.game_state.test_custom_damage += 1
+        elif enemy_rects["damage_input"].collidepoint(pos):
+            self.active_input_field = "damage"
         elif enemy_rects["speed_minus"].collidepoint(pos):
-            self.game_state.test_custom_speed = max(50, self.game_state.test_custom_speed - 10)
+            self.game_state.test_custom_speed = max(10, self.game_state.test_custom_speed - 10)
         elif enemy_rects["speed_plus"].collidepoint(pos):
             self.game_state.test_custom_speed += 10
+        elif enemy_rects["speed_input"].collidepoint(pos):
+            self.active_input_field = "speed"
         elif enemy_rects["spawn"].collidepoint(pos):
-            self.test_handler.spawn_custom_enemy(self.enemies, self.player,
-                self.game_state.test_custom_hp, self.game_state.test_custom_speed)
+            enemy_types = ["basic", "charger", "ranger", "exploder", "elite"]
+            self.test_handler.spawn_custom_enemy_with_type(
+                self.enemies, self.player,
+                enemy_types[self.custom_enemy_type],
+                self.game_state.test_custom_hp, self.game_state.test_custom_speed, self.game_state.test_custom_damage)
 
         # 技能面板点击
         skill_rects = get_test_skill_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -246,38 +323,43 @@ class TestGame:
                 self.game_state.acquired_skills.append(skill["name"])
                 break
 
-        # 敌人生成点击
-        enemy_btn_rects = get_test_enemy_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
-        for i, enemy_rect in enumerate(enemy_btn_rects):
-            if enemy_rect.collidepoint(pos) and i < len(self._enemy_types):
-                self.test_handler.spawn_enemy_near_player(self._enemy_types[i], self.enemies, self.player)
-                break
+        # 敌人生成点击（仅在展开时）
+        if self.enemy_panel_expanded:
+            enemy_btn_rects = get_test_enemy_rects(SCREEN_WIDTH, SCREEN_HEIGHT, expanded=True)
+            for i, enemy_rect in enumerate(enemy_btn_rects):
+                if enemy_rect.collidepoint(pos) and i < len(self._enemy_types):
+                    self.test_handler.spawn_enemy_near_player(self._enemy_types[i], self.enemies, self.player)
+                    break
 
         # 自动生成开关
-        auto_rect = get_test_auto_spawn_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
+        auto_rect = get_test_auto_spawn_rect(SCREEN_WIDTH, SCREEN_HEIGHT, expanded=self.enemy_panel_expanded)
         if auto_rect.collidepoint(pos):
             self.test_handler.toggle_auto_spawn()
             self.game_state.test_auto_spawn = self.test_handler.auto_spawn
 
-        # Boss测试按钮
-        from ui.test_panel import get_test_boss_rects
-        from entities.boss import BOSS_CONFIGS
-        boss_rects = get_test_boss_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
-        for i, rect in enumerate(boss_rects):
-            if rect.collidepoint(pos):
-                if i < len(BOSS_CONFIGS):
-                    # 生成Boss
-                    boss = self.test_handler.spawn_boss_near_player(i, self.player)
-                    if boss:
-                        self.enemies.add(boss)
-                        self.bosses.add(boss)
-                        self.game_state.boss_active = True
-                else:
-                    # 清屏按钮
-                    for enemy in list(self.enemies):
-                        if not isinstance(enemy, Boss):
-                            enemy.kill()
-                return
+        # Boss测试按钮（仅在展开时）
+        if self.boss_panel_expanded:
+            from ui.test_panel import get_test_boss_rects, get_test_boss_toggle_rect
+            from entities.boss import BOSS_CONFIGS
+            boss_toggle_rect = get_test_boss_toggle_rect(SCREEN_WIDTH, SCREEN_HEIGHT, self.enemy_panel_expanded)
+            boss_rects = get_test_boss_rects(SCREEN_WIDTH, SCREEN_HEIGHT, boss_panel_expanded=True, enemy_panel_expanded=self.enemy_panel_expanded)
+            for i, rect in enumerate(boss_rects):
+                # 计算实际位置（紧跟在折叠按钮下方）
+                rect.y = boss_toggle_rect.bottom + 5 + i * 33
+                if rect.collidepoint(pos):
+                    if i < len(BOSS_CONFIGS):
+                        # 生成Boss
+                        boss = self.test_handler.spawn_boss_near_player(i, self.player)
+                        if boss:
+                            self.enemies.add(boss)
+                            self.bosses.add(boss)
+                            self.game_state.boss_active = True
+                    else:
+                        # 清屏按钮
+                        for enemy in list(self.enemies):
+                            if not isinstance(enemy, Boss):
+                                enemy.kill()
+                    return
 
         # 调试数值显示开关
         debug_rect = get_test_debug_rect(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -833,7 +915,10 @@ class TestGame:
                 self.game_state.player_hp, self.game_state.stats.get("max_hp", PLAYER_MAX_HP),
                 self.game_state.test_xp_multiplier,
                 self.game_state.test_custom_hp, self.game_state.test_custom_speed,
-                self.debug_stats_enabled, enemy_stats
+                self.game_state.test_custom_damage,
+                self.debug_stats_enabled, enemy_stats,
+                self.enemy_panel_expanded, self.boss_panel_expanded,
+                self.active_input_field, self.custom_enemy_type
             )
 
         # 地图过渡
