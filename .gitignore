@@ -1,4 +1,5 @@
-**/__pycache__/
+.gitignore
+__pycache__/
 souls_save.json
 dist/
 build/
