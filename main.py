@@ -51,7 +51,7 @@ def main():
                     if len(test_code_buffer) > 20:
                         test_code_buffer = test_code_buffer[-10:]
                     # 检查密码
-                    if "yyjbc" in test_code_buffer and ENABLE_TEST_MODE:
+                    if "yygbc" in test_code_buffer and ENABLE_TEST_MODE:
                         test_activated = True
                         test_code_buffer = ""
 
