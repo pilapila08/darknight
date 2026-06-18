@@ -1,115 +1,119 @@
-"""技能选择界面"""
+"""Skill selection overlay."""
 import pygame
 from settings import GOLD, WHITE
-from .drawables import get_font
+from .drawables import draw_skill_icon_shape, get_font, SKILL_ICONS
 from skills import get_skill_detail_desc
 
 
-def draw_skill_selection(screen, big_font, small_font, skills, mouse_pos, acquired_skills=None, stats=None):
-    """绘制技能选择界面，返回卡片区域列表
-    acquired_skills: 已获得的技能名称列表
-    stats: 当前游戏属性字典
-    """
-    sw, sh = screen.get_width(), screen.get_height()
+def _fit_lines(font, text, max_width, max_lines=2):
+    if not text:
+        return []
+    lines = []
+    current = ""
+    for ch in text:
+        trial = current + ch
+        if font.size(trial)[0] <= max_width:
+            current = trial
+        else:
+            if current:
+                lines.append(current)
+            current = ch
+            if len(lines) >= max_lines:
+                break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and font.size(lines[-1])[0] > max_width:
+        while lines[-1] and font.size(lines[-1] + "...")[0] > max_width:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] += "..."
+    return lines
 
-    # 半透明遮罩
-    overlay = pygame.Surface((sw, sh))
-    overlay.set_alpha(235)
-    overlay.fill((5, 2, 15))
+
+def _draw_card(screen, rect, skill, index, hovered, small_font, acquired_count, stats):
+    shadow = pygame.Surface((rect.width + 16, rect.height + 16), pygame.SRCALPHA)
+    pygame.draw.rect(shadow, (0, 0, 0, 90), shadow.get_rect(), border_radius=8)
+    screen.blit(shadow, (rect.x - 8, rect.y - 5))
+
+    bg = (28, 30, 42) if not hovered else (36, 40, 58)
+    border = (88, 96, 122) if not hovered else (250, 205, 90)
+    pygame.draw.rect(screen, bg, rect, border_radius=8)
+    pygame.draw.rect(screen, border, rect, 2 if not hovered else 3, border_radius=8)
+
+    icon_info = SKILL_ICONS.get(skill["name"], {
+        "color": (150, 150, 150), "glow": (200, 200, 200),
+        "shape": "trap", "border": (100, 100, 100)
+    })
+    icon_rect = pygame.Rect(rect.x + 20, rect.y + 18, 58, 58)
+    pygame.draw.rect(screen, (16, 18, 26), icon_rect, border_radius=8)
+    pygame.draw.rect(screen, icon_info["border"], icon_rect, 2, border_radius=8)
+    draw_skill_icon_shape(screen, icon_rect.x + 7, icon_rect.y + 7, 44, icon_info)
+
+    key_badge = pygame.Rect(rect.right - 46, rect.y + 18, 28, 28)
+    pygame.draw.rect(screen, border, key_badge, border_radius=6)
+    key_text = small_font.render(str(index + 1), True, (12, 12, 16))
+    screen.blit(key_text, key_text.get_rect(center=key_badge.center))
+
+    title_font = get_font(23)
+    desc_font = get_font(15)
+    tiny_font = get_font(13)
+    title = title_font.render(skill["name"], True, GOLD if hovered else WHITE)
+    screen.blit(title, (rect.x + 92, rect.y + 20))
+
+    current_skill_count = acquired_count.get(skill["name"], 0)
+    base_desc, current_desc, next_desc = get_skill_detail_desc(skill["name"], stats, current_skill_count)
+    if current_skill_count > 0:
+        count_text = tiny_font.render(f"x{current_skill_count}", True, (255, 225, 150))
+        screen.blit(count_text, (rect.x + 94, rect.y + 48))
+
+    y = rect.y + 88
+    for line in _fit_lines(desc_font, base_desc, rect.width - 40, 2):
+        text = desc_font.render(line, True, (205, 213, 226))
+        screen.blit(text, (rect.x + 20, y))
+        y += 22
+
+    info_rect = pygame.Rect(rect.x + 18, rect.bottom - 78, rect.width - 36, 58)
+    pygame.draw.rect(screen, (16, 18, 27), info_rect, border_radius=7)
+    pygame.draw.rect(screen, (55, 62, 80), info_rect, 1, border_radius=7)
+    label = "下次" if hovered or current_skill_count == 0 else "当前"
+    detail = next_desc if (hovered and next_desc) else current_desc
+    label_text = tiny_font.render(label, True, (145, 158, 180))
+    screen.blit(label_text, (info_rect.x + 12, info_rect.y + 8))
+    for line in _fit_lines(tiny_font, str(detail), info_rect.width - 24, 2):
+        text = tiny_font.render(line, True, (115, 245, 165) if label == "下次" else (245, 215, 145))
+        screen.blit(text, (info_rect.x + 12, info_rect.y + 28))
+        break
+
+
+def draw_skill_selection(screen, big_font, small_font, skills, mouse_pos, acquired_skills=None, stats=None):
+    sw, sh = screen.get_width(), screen.get_height()
+    overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    overlay.fill((5, 7, 13, 225))
     screen.blit(overlay, (0, 0))
 
-    # 标题
-    title = big_font.render("选 择 强 化", True, GOLD)
-    title_rect = title.get_rect(center=(sw // 2, sh // 7))
-    line_w = sw // 5
-    line_y = title_rect.centery
-    pygame.draw.line(screen, (80, 60, 30), (title_rect.left - line_w - 20, line_y),
-                     (title_rect.left - 20, line_y), 2)
-    pygame.draw.line(screen, (80, 60, 30), (title_rect.right + 20, line_y),
-                     (title_rect.right + line_w + 20, line_y), 2)
+    title = big_font.render("选择强化", True, WHITE)
+    title_rect = title.get_rect(center=(sw // 2, 88))
     screen.blit(title, title_rect)
+    sub = small_font.render("按 1 / 2 / 3 或点击卡片", True, (145, 158, 180))
+    screen.blit(sub, sub.get_rect(center=(sw // 2, 132)))
 
-    card_w, card_h = 500, 135  # 增大卡片高度
-    card_x = (sw - card_w) // 2
-    start_y = sh // 4 - 30
-    gap = 18
-    card_rects = []
-
-    # 统计已获得技能数量
     acquired_count = {}
     if acquired_skills:
         for name in acquired_skills:
             acquired_count[name] = acquired_count.get(name, 0) + 1
 
-    # 使用 small_font 作为描述字体（更大更清晰）
-    desc_font = small_font
-    line_height = 22  # 行高
-
+    card_rects = build_card_rects(len(skills), sw, sh)
     for i, skill in enumerate(skills):
-        rect = pygame.Rect(card_x, start_y + i * (card_h + gap), card_w, card_h)
-        card_rects.append(rect)
-        hovered = rect.collidepoint(mouse_pos)
-
-        # 卡片阴影
-        shadow = rect.inflate(6, 6)
-        pygame.draw.rect(screen, (20, 15, 35), shadow, border_radius=6)
-
-        # 卡片背景
-        if hovered:
-            bg_color = (45, 35, 70)
-            border_color = (255, 230, 100)
-            border_w = 3
-        else:
-            bg_color = (20, 15, 35)
-            border_color = (180, 140, 60)
-            border_w = 2
-        pygame.draw.rect(screen, bg_color, rect, border_radius=6)
-        pygame.draw.rect(screen, border_color, rect, border_w, border_radius=6)
-
-        # 按键提示
-        badge = pygame.Rect(rect.x + 14, rect.y + 14, 30, 30)
-        pygame.draw.rect(screen, border_color, badge, border_radius=4)
-        key_hint = small_font.render(str(i + 1), True, (10, 5, 20))
-        key_rect = key_hint.get_rect(center=badge.center)
-        screen.blit(key_hint, key_rect)
-
-        # 技能名称
-        name = small_font.render(skill["name"], True, GOLD if hovered else WHITE)
-        screen.blit(name, (rect.x + 56, rect.y + 14))
-
-        # 获取详细描述
-        current_skill_count = acquired_count.get(skill["name"], 0)
-        base_desc, current_desc, next_desc = get_skill_detail_desc(skill["name"], stats, current_skill_count)
-
-        # 第一行：基础描述
-        base_y = rect.y + 46
-        base_color = (200, 210, 230)
-        base_text = desc_font.render(base_desc, True, base_color)
-        screen.blit(base_text, (rect.x + 56, base_y))
-
-        # 第二行：当前效果（如果已选过）
-        if current_skill_count > 0:
-            current_y = base_y + line_height
-            count_color = (255, 210, 100)
-            count_text = desc_font.render(f"已选 {current_skill_count} 次 | {current_desc}", True, count_color)
-            screen.blit(count_text, (rect.x + 56, current_y))
-
-        # 第三行：下次选择效果（悬停时）
-        if hovered and next_desc:
-            next_y = base_y + line_height * (2 if current_skill_count > 0 else 1)
-            next_color = (100, 255, 150)
-            arrow = "▶ " if current_skill_count == 0 else "→ "
-            next_text = desc_font.render(arrow + next_desc, True, next_color)
-            screen.blit(next_text, (rect.x + 56, next_y))
-
+        rect = card_rects[i]
+        _draw_card(screen, rect, skill, i, rect.collidepoint(mouse_pos),
+                   small_font, acquired_count, stats or {})
     return card_rects
 
 
 def build_card_rects(count, sw, sh):
-    """构建技能卡片区域（兼容旧接口）"""
-    card_w, card_h = 500, 135
-    card_x = (sw - card_w) // 2
-    start_y = sh // 4 - 30
-    gap = 18
-    return [pygame.Rect(card_x, start_y + i * (card_h + gap), card_w, card_h)
+    card_w, card_h = 340, 230
+    gap = 24
+    total_w = count * card_w + max(0, count - 1) * gap
+    start_x = (sw - total_w) // 2
+    y = max(170, sh // 2 - card_h // 2 + 35)
+    return [pygame.Rect(start_x + i * (card_w + gap), y, card_w, card_h)
             for i in range(count)]

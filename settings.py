@@ -83,8 +83,8 @@ ORB_RADIUS = 5
 ORB_SPEED = 640       # magnetized flight speed (was 320, 2x)
 PICKUP_RANGE = 144    # was 90, 1.6x scale
 XP_PER_ORB = 1
-XP_BASE = 8           # 1→2级所需经验
-XP_GROWTH = 1.1       # 每级经验×1.1 (几何增长)
+XP_BASE = 14          # 1→2级所需经验（放缓前期升级节奏）
+XP_GROWTH = 1.15      # 每级经验×1.15 (几何增长，抬高中后期需求)
 
 # Orbital Blades
 BLADE_DAMAGE = 8        # DPS per blade

@@ -15,17 +15,23 @@ def draw_boss_hp_bar(screen, font, boss):
     name_rect = name_text.get_rect(center=(sw // 2, bar_y - 18))
     screen.blit(name_text, name_rect)
 
-    bg_rect = pygame.Rect(bar_x - 2, bar_y - 2, bar_width + 4, bar_height + 4)
-    pygame.draw.rect(screen, (20, 20, 20), bg_rect, border_radius=4)
-    pygame.draw.rect(screen, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height), border_radius=4)
+    bg_rect = pygame.Rect(bar_x - 10, bar_y - 8, bar_width + 20, bar_height + 16)
+    pygame.draw.rect(screen, (8, 10, 16), bg_rect, border_radius=8)
+    pygame.draw.rect(screen, (74, 66, 78), bg_rect, 1, border_radius=8)
+    bar_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+    pygame.draw.rect(screen, (35, 37, 46), bar_rect, border_radius=6)
 
     hp_ratio = max(0, boss.hp / boss.max_hp)
     fill_width = int(bar_width * hp_ratio)
     hp_color = RED if hp_ratio < 0.3 else GOLD
     if fill_width > 0:
-        pygame.draw.rect(screen, hp_color, (bar_x, bar_y, fill_width, bar_height), border_radius=4)
+        fill_rect = pygame.Rect(bar_x, bar_y, fill_width, bar_height)
+        pygame.draw.rect(screen, hp_color, fill_rect, border_radius=6)
+        shine = fill_rect.copy()
+        shine.height = max(2, bar_height // 3)
+        pygame.draw.rect(screen, (255, 255, 255, 34), shine, border_radius=5)
 
-    pygame.draw.rect(screen, GOLD, (bar_x, bar_y, bar_width, bar_height), 2, border_radius=4)
+    pygame.draw.rect(screen, GOLD, bar_rect, 2, border_radius=6)
 
     hp_text = font.render(str(max(0, int(boss.hp))) + "/" + str(int(boss.max_hp)), True, WHITE)
     hp_rect = hp_text.get_rect(center=(sw // 2, bar_y + bar_height // 2))

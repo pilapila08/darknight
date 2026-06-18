@@ -44,10 +44,13 @@ class Explosion:
 
     def draw(self, screen, camera):
         alpha = int(180 * max(0, 1 - self.elapsed / self.lifetime))
-        surf = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        radius = max(1, int(self.radius))
+        surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(surf, (*PURPLE, alpha),
-                          (self.radius, self.radius), int(self.radius))
+                          (radius, radius), radius)
+        pygame.draw.circle(surf, (255, 190, 255, min(255, alpha + 40)),
+                          (radius, radius), max(1, radius // 2), 2)
         pygame.draw.circle(surf, (*PURPLE, min(255, alpha + 60)),
-                          (self.radius, self.radius), int(self.radius), 2)
+                          (radius, radius), radius, 2)
         pos = camera.apply(pygame.Rect(self.x, self.y, 0, 0))
-        screen.blit(surf, (pos.x - self.radius, pos.y - self.radius))
+        screen.blit(surf, (pos.x - radius, pos.y - radius))

@@ -1,58 +1,52 @@
-"""游戏结束界面"""
+"""Game over screen."""
 import pygame
-from settings import BLACK, DARK_GRAY, WHITE, RED, GOLD, GREEN
+from settings import WHITE, RED, GOLD, GREEN
 
 
 def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, high_score, is_new_record, is_victory=False):
-    """绘制游戏结束界面，返回重新开始按钮区域"""
     sw, sh = screen.get_width(), screen.get_height()
-    overlay = pygame.Surface((sw, sh))
-    overlay.set_alpha(220)
-    overlay.fill(BLACK)
+    overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    overlay.fill((4, 5, 10, 226))
     screen.blit(overlay, (0, 0))
 
-    title = big_font.render("游 戏 结 束", True, RED)
-    subtitle = font.render("你已阵亡", True, (150, 150, 150))
+    panel = pygame.Rect(sw // 2 - 250, sh // 2 - 210, 500, 360)
+    pygame.draw.rect(screen, (20, 23, 33), panel, border_radius=8)
+    pygame.draw.rect(screen, (80, 88, 112), panel, 1, border_radius=8)
 
-    title_rect = title.get_rect(center=(sw // 2, sh // 6))
-    screen.blit(title, title_rect)
-    subtitle_rect = subtitle.get_rect(center=(sw // 2, sh // 6 + 50))
-    screen.blit(subtitle, subtitle_rect)
+    title_text = "胜利" if is_victory else "游戏结束"
+    title_color = GREEN if is_victory else RED
+    title = big_font.render(title_text, True, title_color)
+    screen.blit(title, title.get_rect(center=(sw // 2, panel.y + 58)))
 
-    y = sh // 3
-    gap = sh // 18
-
+    minutes = int(elapsed_time // 60)
+    seconds = int(elapsed_time % 60)
     lines = [
-        f"存活时间：{elapsed_time:.0f} 秒",
-        f"击杀敌人：{score}",
-        f"达到等级：Lv.{level}",
-        f"历史最高分：{high_score}",
+        ("存活时间", f"{minutes:02d}:{seconds:02d}"),
+        ("击杀敌人", str(score)),
+        ("达到等级", f"Lv.{level}"),
+        ("最高分", str(high_score)),
     ]
-    for line in lines:
-        text = font.render(line, True, WHITE)
-        rect = text.get_rect(center=(sw // 2, y))
-        screen.blit(text, rect)
-        y += gap
+    y = panel.y + 112
+    for label, value in lines:
+        row = pygame.Rect(panel.x + 58, y, panel.width - 116, 36)
+        pygame.draw.rect(screen, (29, 33, 46), row, border_radius=6)
+        label_text = font.render(label, True, (145, 158, 180))
+        value_text = font.render(value, True, WHITE)
+        screen.blit(label_text, (row.x + 14, row.y + 6))
+        screen.blit(value_text, value_text.get_rect(midright=(row.right - 14, row.centery)))
+        y += 44
 
     if is_new_record:
-        record_text = big_font.render("新 纪 录 ！", True, GOLD)
-        record_rect = record_text.get_rect(center=(sw // 2, y))
-        screen.blit(record_text, record_rect)
-        y += 50
+        record_text = font.render("新纪录", True, GOLD)
+        screen.blit(record_text, record_text.get_rect(center=(sw // 2, y + 8)))
 
-    # 重新开始按钮
     btn_w, btn_h = 240, 50
-    btn_x = (sw - btn_w) // 2
-    btn_y = sh - 120
-    btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-    pygame.draw.rect(screen, DARK_GRAY, btn_rect)
-    pygame.draw.rect(screen, WHITE, btn_rect, 2)
-    btn_text = font.render("重 新 开 始", True, WHITE)
-    btn_text_rect = btn_text.get_rect(center=btn_rect.center)
-    screen.blit(btn_text, btn_text_rect)
+    btn_rect = pygame.Rect((sw - btn_w) // 2, panel.bottom - 72, btn_w, btn_h)
+    pygame.draw.rect(screen, (35, 40, 55), btn_rect, border_radius=8)
+    pygame.draw.rect(screen, GOLD, btn_rect, 2, border_radius=8)
+    btn_text = font.render("重新开始", True, GOLD)
+    screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
-    hint = font.render("按 SPACE 或点击按钮重新开始", True, (120, 120, 140))
-    hint_rect = hint.get_rect(center=(sw // 2, btn_y + btn_h + 20))
-    screen.blit(hint, hint_rect)
-
+    hint = font.render("按 SPACE 或点击按钮", True, (130, 140, 160))
+    screen.blit(hint, hint.get_rect(center=(sw // 2, btn_rect.bottom + 22)))
     return btn_rect

@@ -23,16 +23,18 @@ class GameState:
             "damage_taken": 1.0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
-            "greedy_count": 0,       # 贪婪之魂计数（经验×1.25^n）
+            "greedy_count": 0,       # 贪婪之魂计数（经验×(1+0.15n)）
             "bullet_speed": 1.0,    # 子弹速度倍率
-            "bullet_speed_damage_mult": 1.0,  # 急速子弹速度达上限后的伤害倍率
+            "bullet_speed_damage_mult": 1.0,  # 保留字段：旧存档兼容，不再由急速子弹提升
             "regen_kills": 0,        # 复苏之风需要击杀数（0表示未获得）
             "regen_kills_progress": 0,
             "regen_hp_amount": 1,    # 复苏之风每次回复血量
             "max_hp": PLAYER_MAX_HP, # 血量上限
             "has_blades": 0,
-            "blade_count": 0,  # 刀刃数量
-            "blade_damage": 0,  # 刀刃伤害
+            "blade_count": 0,  # 兼容字段：暗影新星层数
+            "blade_damage": 0,  # 暗影新星伤害
+            "nova_cooldown": 3.8,
+            "nova_radius": 150,
             "has_lightning": 0,
             "lightning_chains": 0,  # 闪电弹跳次数
             "lightning_damage": 0,  # 闪电伤害
@@ -52,6 +54,8 @@ class GameState:
         self.elapsed_time = 0.0
         self.difficulty_level = 0
         self.player_hp = PLAYER_MAX_HP
+        self.player_shield = 0
+        self.player_max_shield = 10
         self.invincible_timer = 1.5
         self.menu = True
         self.game_over = False
@@ -105,6 +109,8 @@ class GameState:
             "has_blades": 0,
             "blade_count": 0,
             "blade_damage": 0,
+            "nova_cooldown": 3.8,
+            "nova_radius": 150,
             "has_lightning": 0,
             "lightning_chains": 0,
             "lightning_damage": 0,

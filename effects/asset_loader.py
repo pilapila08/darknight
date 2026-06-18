@@ -6,7 +6,7 @@ import os
 import random
 import math
 import pygame
-import numpy as np
+from array import array
 
 ASSETS = "assets"
 SPRITES = os.path.join(ASSETS, "sprites")
@@ -319,27 +319,43 @@ CYAN = (100, 200, 255)
 
 # ---- Sound helpers ----
 
+def _make_sound(samples):
+    pcm = array("h")
+    for value in samples:
+        sample = int(max(-1.0, min(1.0, value)) * 32767)
+        pcm.append(sample)
+        pcm.append(sample)
+    return pygame.mixer.Sound(buffer=pcm)
+
+
 def _gen_shoot_sound():
     dur = 0.04
     n = int(SAMPLE_RATE * dur)
-    t = np.arange(n, dtype=np.float32) / SAMPLE_RATE
-    s = np.sin(2 * math.pi * 800 * t) * np.linspace(1, 0, n, dtype=np.float32)
-    s += np.sin(2 * math.pi * 1200 * t) * np.linspace(1, 0, n, dtype=np.float32) * 0.3
-    s += np.random.uniform(-1, 1, int(SAMPLE_RATE * 0.005)).astype(np.float32) * 0.15
-    arr = (np.clip(s, -1, 1) * 32767 * 0.7).astype(np.int16)
-    return pygame.sndarray.make_sound(np.column_stack([arr, arr]))
+    noise_n = int(SAMPLE_RATE * 0.005)
+    samples = []
+    for i in range(n):
+        t = i / SAMPLE_RATE
+        env = 1 - i / n
+        value = math.sin(2 * math.pi * 800 * t) * env
+        value += math.sin(2 * math.pi * 1200 * t) * env * 0.3
+        if i < noise_n:
+            value += random.uniform(-1, 1) * 0.15 * (1 - i / noise_n)
+        samples.append(value * 0.7)
+    return _make_sound(samples)
 
 
 def _gen_death_sound():
     dur = 0.12
     freq = random.uniform(130, 180)
     n = int(SAMPLE_RATE * dur)
-    t = np.arange(n, dtype=np.float32) / SAMPLE_RATE
-    env = np.linspace(1, 0, n, dtype=np.float32) ** 2
-    s = np.sin(2 * math.pi * freq * t) * env * 0.6
-    s += np.random.uniform(-1, 1, n).astype(np.float32) * env * 0.4
-    arr = (np.clip(s, -1, 1) * 32767 * 0.5).astype(np.int16)
-    return pygame.sndarray.make_sound(np.column_stack([arr, arr]))
+    samples = []
+    for i in range(n):
+        t = i / SAMPLE_RATE
+        env = (1 - i / n) ** 2
+        value = math.sin(2 * math.pi * freq * t) * env * 0.6
+        value += random.uniform(-1, 1) * env * 0.4
+        samples.append(value * 0.5)
+    return _make_sound(samples)
 
 
 # ---- Public API ----

@@ -34,19 +34,28 @@ class Enemy(pygame.sprite.Sprite):
 
         # Animation
         frames = load_image(sprite_name, color, size, animated=True)
+        self._normal_frames = [frame.copy() for frame in frames]
+        self._flash_frames = [self._make_flash_frame(frame) for frame in frames]
         self._anim = Animation(frames, frame_duration=0.15)
-        self._frames = frames  # keep ref for flash restore
+        self._frames = frames
 
         self.image = self._anim.get_image()
         self.rect = self.image.get_rect(topleft=(x, y))
+
+    def _make_flash_frame(self, frame):
+        flash = frame.copy()
+        mask = pygame.mask.from_surface(frame)
+        silhouette = mask.to_surface(
+            setcolor=(255, 255, 255, 170),
+            unsetcolor=(0, 0, 0, 0)
+        ).convert_alpha()
+        flash.blit(silhouette, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        return flash
 
     def take_damage(self, damage):
         self.hp -= damage
         if self.hp > 0:
             self.flash_timer = 0.1
-            # Flash: temporarily make all frames white
-            for f in self._frames:
-                f.fill(WHITE)
         return self.hp <= 0
 
     def apply_dot(self, duration, tick_interval, damage_per_tick):
@@ -62,10 +71,6 @@ class Enemy(pygame.sprite.Sprite):
     def _update_flash(self, dt):
         if self.flash_timer > 0:
             self.flash_timer -= dt
-            if self.flash_timer <= 0:
-                # Restore original color to all frames
-                for f in self._frames:
-                    f.fill(self._base_color)
 
     def _update_dot(self, dt):
         if self.dot_timer > 0:
@@ -91,5 +96,8 @@ class Enemy(pygame.sprite.Sprite):
         self._update_flash(dt)
         self._update_dot(dt)
         self._anim.update(dt)
-        self.image = self._anim.get_image()
+        if self.flash_timer > 0:
+            self.image = self._flash_frames[self._anim.current]
+        else:
+            self.image = self._normal_frames[self._anim.current]
         self._move_toward(player_rect.centerx, player_rect.centery, dt)

@@ -22,7 +22,6 @@ class LightningBolt:
 
     def draw(self, screen, camera):
         alpha = int(200 * (1 - self.elapsed / self.lifetime))
-        color = (*CYAN, alpha)
         p1 = camera.apply(pygame.Rect(self.start[0], self.start[1], 0, 0))
         p2 = camera.apply(pygame.Rect(self.end[0], self.end[1], 0, 0))
         # Draw a jagged line between p1 and p2
@@ -35,7 +34,10 @@ class LightningBolt:
             points.append((px, py))
         points.append((p2.x, p2.y))
         if len(points) >= 2:
-            pygame.draw.lines(screen, color, False, points, 2)
+            fx = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            pygame.draw.lines(fx, (*CYAN, max(35, alpha // 2)), False, points, 6)
+            pygame.draw.lines(fx, (210, 245, 255, alpha), False, points, 2)
+            screen.blit(fx, (0, 0))
 
 
 class ChainLightning:

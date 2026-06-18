@@ -15,6 +15,7 @@ MAP_CONFIGS = [
         "name_en": "Bleak Graveyard",
         "bg_color": (15, 18, 12),
         "grid_color": (30, 40, 25),
+        "accent_color": (80, 95, 55),
         "mechanic": None,
     },
     {
@@ -23,6 +24,7 @@ MAP_CONFIGS = [
         "name_en": "Corrupted Swamp",
         "bg_color": (20, 30, 10),
         "grid_color": (40, 50, 20),
+        "accent_color": (60, 130, 45),
         "mechanic": "poison_pools",
         "mechanic_interval": 5.0,
         "poison_pool_radius": 40,
@@ -35,6 +37,7 @@ MAP_CONFIGS = [
         "name_en": "Shadow Court",
         "bg_color": (15, 5, 25),
         "grid_color": (35, 20, 45),
+        "accent_color": (95, 55, 130),
         "mechanic": "darkness_waves",
         "darkness_interval": 30.0,
         "darkness_duration": 3.0,
@@ -46,6 +49,7 @@ MAP_CONFIGS = [
         "name_en": "Iron Ruins",
         "bg_color": (25, 18, 12),
         "grid_color": (50, 45, 40),
+        "accent_color": (110, 105, 95),
         "mechanic": "debris_fields",
         "debris_count": 10,
         "debris_size": 32,
@@ -57,6 +61,7 @@ MAP_CONFIGS = [
         "name_en": "Void Rift",
         "bg_color": (8, 0, 15),
         "grid_color": (25, 0, 40),
+        "accent_color": (120, 45, 155),
         "mechanic": "gravity_anomalies",
         "anomaly_count": 4,
         "anomaly_radius": 100,
@@ -82,6 +87,9 @@ class MapManager:
         self.debris_rects = []
         self.debris_generated = False
         self.anomalies = []
+        self.scenery = []
+        self._vignette = None
+        self._generate_scenery()
 
     def switch_to_map(self, map_index):
         """Transition to a new map."""
@@ -103,13 +111,39 @@ class MapManager:
         self.debris_rects = []
         self.debris_generated = False
         self.anomalies = []
+        self.scenery = []
 
     def _init_map_mechanics(self):
         mechanic = self.map_data.get("mechanic")
+        self._generate_scenery()
         if mechanic == "debris_fields":
             self._generate_debris()
         elif mechanic == "gravity_anomalies":
             self._generate_anomalies()
+
+    def _generate_scenery(self):
+        rng = random.Random(9000 + self.current_map_index)
+        self.scenery = []
+        for _ in range(220):
+            x = rng.randint(0, MAP_WIDTH)
+            y = rng.randint(0, MAP_HEIGHT)
+            kind_roll = rng.random()
+            if kind_roll < 0.58:
+                kind = "speck"
+                size = rng.randint(2, 5)
+            elif kind_roll < 0.82:
+                kind = "tuft"
+                size = rng.randint(5, 11)
+            else:
+                kind = "stone"
+                size = rng.randint(8, 18)
+            self.scenery.append({
+                "x": x,
+                "y": y,
+                "kind": kind,
+                "size": size,
+                "phase": rng.random() * math.pi * 2,
+            })
 
     def _generate_debris(self):
         count = self.map_data["debris_count"]
@@ -246,19 +280,64 @@ class MapManager:
         start_x = int(camera.offset.x % gs)
         start_y = int(camera.offset.y % gs)
         grid_color = self.map_data["grid_color"]
+        minor_color = tuple(max(0, c - 8) for c in grid_color)
 
+        for x in range(-start_x % (gs // 2), SCREEN_WIDTH, gs // 2):
+            pygame.draw.line(screen, minor_color, (x, 0), (x, SCREEN_HEIGHT))
+        for y in range(-start_y % (gs // 2), SCREEN_HEIGHT, gs // 2):
+            pygame.draw.line(screen, minor_color, (0, y), (SCREEN_WIDTH, y))
         for x in range(-start_x, SCREEN_WIDTH, gs):
             pygame.draw.line(screen, grid_color, (x, 0), (x, SCREEN_HEIGHT))
         for y in range(-start_y, SCREEN_HEIGHT, gs):
             pygame.draw.line(screen, grid_color, (0, y), (SCREEN_WIDTH, y))
 
+        self._draw_scenery(screen, camera)
         self._draw_mechanics(screen, camera)
+        self._draw_vignette(screen)
 
         if self.transition_active:
             alpha = int(255 * min(1.0, self.transition_timer))
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, min(200, alpha)))
             screen.blit(overlay, (0, 0))
+
+    def _draw_scenery(self, screen, camera):
+        accent = self.map_data["accent_color"]
+        dim = tuple(max(0, c - 45) for c in accent)
+        glow = tuple(min(255, c + 35) for c in accent)
+
+        for item in self.scenery:
+            rect = pygame.Rect(item["x"], item["y"], item["size"], item["size"])
+            pos = camera.apply(rect)
+            if not (-30 <= pos.x <= SCREEN_WIDTH + 30 and -30 <= pos.y <= SCREEN_HEIGHT + 30):
+                continue
+
+            size = item["size"]
+            if item["kind"] == "speck":
+                pygame.draw.circle(screen, dim, pos.center, max(1, size // 2))
+            elif item["kind"] == "tuft":
+                base_x, base_y = pos.centerx, pos.bottom
+                pygame.draw.line(screen, accent, (base_x, base_y),
+                                 (base_x - size // 2, base_y - size), 2)
+                pygame.draw.line(screen, dim, (base_x, base_y),
+                                 (base_x + size // 2, base_y - size + 2), 2)
+            else:
+                pygame.draw.ellipse(screen, dim, pos)
+                pygame.draw.arc(screen, glow, pos, math.pi, math.pi * 1.65, 2)
+
+    def _draw_vignette(self, screen):
+        if self._vignette is None:
+            self._vignette = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            edge = 160
+            for i in range(edge):
+                alpha = int(70 * (1 - i / edge) ** 2)
+                pygame.draw.line(self._vignette, (0, 0, 0, alpha), (0, i), (SCREEN_WIDTH, i))
+                pygame.draw.line(self._vignette, (0, 0, 0, alpha),
+                                 (0, SCREEN_HEIGHT - 1 - i), (SCREEN_WIDTH, SCREEN_HEIGHT - 1 - i))
+                pygame.draw.line(self._vignette, (0, 0, 0, alpha), (i, 0), (i, SCREEN_HEIGHT))
+                pygame.draw.line(self._vignette, (0, 0, 0, alpha),
+                                 (SCREEN_WIDTH - 1 - i, 0), (SCREEN_WIDTH - 1 - i, SCREEN_HEIGHT))
+        screen.blit(self._vignette, (0, 0))
 
     def _draw_mechanics(self, screen, camera):
         mechanic = self.map_data.get("mechanic")

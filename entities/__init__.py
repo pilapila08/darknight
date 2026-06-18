@@ -10,4 +10,5 @@ from .damage_number import DamageNumber
 from .explosion import Explosion
 from .animation import Animation
 from .acid_trap import TrapManager
+from .drop_item import HealthPack, ShieldPickup, DropItem
 from .boss import Boss, BossProjectile, AreaEffect, BOSS_CONFIGS, BoomerangFist

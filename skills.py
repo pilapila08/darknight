@@ -12,9 +12,10 @@ SKILL_POOL = [
     },
     {
         "name": "急速射击",
-        "desc": "攻击间隔 -25%",
+        "desc": "攻击间隔 -15%（最低0.18s）",
         "key": "fire_interval",
-        "factor": 0.75,
+        "factor": 0.85,
+        "min_value": 0.18,
     },
     {
         "name": "凌波微步",
@@ -24,9 +25,9 @@ SKILL_POOL = [
     },
     {
         "name": "贪婪之魂",
-        "desc": "经验获取 ×1.25（独立加成）",
+        "desc": "经验获取 +15%（线性叠加）",
         "key": "greedy_count",
-        "factor": 1.25,
+        "factor": 0.15,
         "is_xp_mult": True,  # 标记为经验倍率技能
     },
     {
@@ -44,10 +45,11 @@ SKILL_POOL = [
     # Functional modifiers
     {
         "name": "致命节奏",
-        "desc": "+15% 暴击率，+0.5 暴击伤害（可叠加）",
+        "desc": "+10% 暴击率，+0.25 暴击伤害（暴击率最高60%）",
         "key": "crit_chance",
-        "delta": 0.15,
-        "crit_multiplier_bonus": 0.5,  # 额外暴击伤害
+        "delta": 0.10,
+        "max_value": 0.60,
+        "crit_multiplier_bonus": 0.25,  # 额外暴击伤害
     },
     {
         "name": "复苏之风",
@@ -67,35 +69,41 @@ SKILL_POOL = [
     },
     # Weapon unlocks (with stacking)
     {
-        "name": "旋转利刃",
-        "desc": "初始3个刀刃，伤害10（重复+2伤）",
+        "name": "暗影新星",
+        "desc": "周期性释放范围冲击波，击退并伤害周围敌人",
         "key": "has_blades",
         "delta": 1,
-        "base_count": 3,  # 初始数量
-        "base_damage": 10,  # 初始伤害
-        "damage_per_stack": 2,  # 每次叠加增加伤害
+        "base_count": 1,
+        "base_damage": 12,
+        "damage_per_stack": 3,
+        "base_cooldown": 3.8,
+        "cooldown_reduction": 0.25,
+        "min_cooldown": 2.2,
+        "base_radius": 150,
+        "radius_per_stack": 12,
     },
     {
         "name": "连锁闪电",
-        "desc": "初始弹跳8次，伤害8（重复+1跳+2伤）",
+        "desc": "初始弹跳5次，伤害7（重复+1跳+1伤）",
         "key": "has_lightning",
         "delta": 1,
-        "base_chains": 8,  # 初始弹跳次数
-        "base_damage": 8,  # 初始伤害
+        "base_chains": 5,  # 初始弹跳次数
+        "base_damage": 7,  # 初始伤害
         "chains_per_stack": 1,  # 每次叠加增加弹跳
-        "damage_per_stack": 2,  # 每次叠加增加伤害
+        "damage_per_stack": 1,  # 每次叠加增加伤害
     },
     {
         "name": "剧毒地雷",
-        "desc": "自动释放毒雷（间隔-0.1s，伤害+0.5/s，范围×1.1）",
+        "desc": "自动释放毒雷（间隔-0.1s至最低1.2s，伤害+0.5/s，范围×1.05）",
         "key": "has_traps",
         "delta": 1,
         "base_interval": 2.0,  # 基础释放间隔
         "interval_reduction": 0.1,  # 每次叠加减少间隔
+        "min_interval": 1.2,
         "base_damage": 4,  # 基础伤害
         "damage_per_stack": 0.5,  # 每次叠加增加伤害
         "base_radius_mult": 1.0,  # 基础范围倍率
-        "radius_per_stack": 0.1,  # 每次叠加增加范围
+        "radius_per_stack": 0.05,  # 每次叠加增加范围
     },
 ]
 
@@ -139,7 +147,7 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
     elif key == "fire_interval":
         current = stats.get(key, FIRE_INTERVAL)
         if skill_count > 1:
-            next_val = current * 0.75
+            next_val = max(skill.get("min_value", 0.18), current * skill.get("factor", 0.85))
             return f"间隔 {current:.2f}s → {next_val:.2f}s"
         return f"间隔 {current:.2f}s"
     elif key == "player_speed":
@@ -151,16 +159,13 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
     elif key == "greedy_count":
         count = stats.get(key, 0)
         if count > 0:
-            mult = 1.25 ** count
-            next_mult = 1.25 ** (count + 1)
+            mult = 1.0 + 0.15 * count
+            next_mult = 1.0 + 0.15 * (count + 1)
             return f"经验 ×{mult:.2f} → ×{next_mult:.2f}"
         return "未激活"
     elif key == "bullet_speed":
         mult = stats.get(key, 1.0)
-        dmg_mult = stats.get("bullet_speed_damage_mult", 1.0)
         if mult >= MAX_BULLET_SPEED_MULT:
-            if dmg_mult > 1.0:
-                return f"速度 ×{mult:.2f} / 伤害×{dmg_mult:.2f}"
             return f"速度 ×{mult:.2f}（已达上限）"
         if skill_count > 1:
             next_mult = min(mult * 1.5, MAX_BULLET_SPEED_MULT)
@@ -176,7 +181,8 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
         crit = stats.get(key, 0)
         mult = stats.get("crit_multiplier", CRIT_MULTIPLIER)
         if skill_count > 1:
-            return f"暴击 {int(crit*100)}%+15% / {mult:.1f}x+0.5"
+            next_crit = min(skill.get("max_value", 0.6), crit + skill.get("delta", 0.1))
+            return f"暴击 {int(crit*100)}%→{int(next_crit*100)}% / {mult:.2f}x+0.25"
         return f"暴击 {int(crit*100)}% / {mult:.1f}x"
     elif key == "regen_kills":
         current = stats.get(key, 0)
@@ -208,18 +214,20 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
     elif key == "has_blades":
         if stats.get(key, 0) == 0:
             return "未激活"
-        blade_count = stats.get("blade_count", 3)
-        blade_damage = stats.get("blade_damage", 10)
+        cooldown = stats.get("nova_cooldown", skill.get("base_cooldown", 3.8))
+        radius = stats.get("nova_radius", skill.get("base_radius", 150))
+        blade_damage = stats.get("blade_damage", skill.get("base_damage", 8))
         if skill_count > 1:
-            return f"{blade_count}刃 / 伤{blade_damage}→{blade_damage+2}"
-        return f"{blade_count}刃 / 伤{blade_damage}"
+            next_cd = max(skill.get("min_cooldown", 2.2), cooldown - skill.get("cooldown_reduction", 0.25))
+            return f"伤{blade_damage}→{blade_damage+skill.get('damage_per_stack', 3)} / {cooldown:.1f}s→{next_cd:.1f}s"
+        return f"伤{blade_damage} / 半径{radius} / {cooldown:.1f}s"
     elif key == "has_lightning":
         if stats.get(key, 0) == 0:
             return "未激活"
-        chains = stats.get("lightning_chains", 8)
-        dmg = stats.get("lightning_damage", 8)
+        chains = stats.get("lightning_chains", skill.get("base_chains", 5))
+        dmg = stats.get("lightning_damage", skill.get("base_damage", 7))
         if skill_count > 1:
-            return f"{chains}跳/{dmg}伤 → {chains+1}跳/{dmg+2}伤"
+            return f"{chains}跳/{dmg}伤 → {chains+1}跳/{dmg+skill.get('damage_per_stack', 1)}伤"
         return f"{chains}跳 / 伤{dmg}"
     elif key == "has_traps":
         if stats.get(key, 0) == 0:
@@ -228,7 +236,8 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
         dmg = stats.get("trap_damage", 4)
         radius = stats.get("trap_radius_mult", 1.0)
         if skill_count > 1:
-            return f"{interval:.1f}s/{dmg}伤 → {interval-0.1:.1f}s/{dmg+0.5}伤"
+            next_interval = max(skill.get("min_interval", 1.2), interval - skill.get("interval_reduction", 0.1))
+            return f"{interval:.1f}s/{dmg}伤 → {next_interval:.1f}s/{dmg+0.5}伤"
         return f"间隔{interval:.1f}s / 伤{dmg}"
     return ""
 
@@ -269,11 +278,11 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
         base = FIRE_INTERVAL
         current = stats.get(key, base)
         if is_first:
-            next_val = current * 0.75
-            initial = f"下次选择: {next_val:.2f}s（-25%）"
+            next_val = max(skill.get("min_value", 0.18), current * skill.get("factor", 0.85))
+            initial = f"下次选择: {next_val:.2f}s（-15%）"
         else:
-            next_val = current * 0.75
-            initial = f"下次选择: {next_val:.2f}s（-25%）"
+            next_val = max(skill.get("min_value", 0.18), current * skill.get("factor", 0.85))
+            initial = f"下次选择: {next_val:.2f}s（-15%）"
         return skill["desc"], current, initial
 
     elif key == "player_speed":
@@ -291,25 +300,20 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
         count = stats.get(key, 0)
         if is_first:
             current_mult = 1.0
-            next_mult = 1.25
+            next_mult = 1.15
             initial = f"下次选择: 经验×{next_mult:.2f}"
         else:
-            current_mult = 1.25 ** count
-            next_mult = current_mult * 1.25
+            current_mult = 1.0 + 0.15 * count
+            next_mult = 1.0 + 0.15 * (count + 1)
             initial = f"下次选择: 经验×{next_mult:.2f}"
         current_str = f"经验×{current_mult:.2f}" if count > 0 else "未激活"
         return skill["desc"], current_str, initial
 
     elif key == "bullet_speed":
         mult = stats.get(key, 1.0)
-        dmg_mult = stats.get("bullet_speed_damage_mult", 1.0)
         if mult >= MAX_BULLET_SPEED_MULT:
-            next_dmg_mult = dmg_mult * 1.2
-            current = f"子弹速度×{mult:.2f} / 伤害×{dmg_mult:.2f}"
-            if is_first:
-                initial = f"下次选择: 伤害×{next_dmg_mult:.2f}"
-            else:
-                initial = f"下次选择: 伤害×{next_dmg_mult:.2f}"
+            current = f"子弹速度×{mult:.2f}（已达上限）"
+            initial = "已达上限，不再出现在升级选项中"
             return skill["desc"], current, initial
         next_mult = min(mult * 1.5, MAX_BULLET_SPEED_MULT)
         if is_first:
@@ -333,12 +337,12 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
         crit = stats.get(key, 0)
         mult = stats.get("crit_multiplier", CRIT_MULTIPLIER)
         if is_first:
-            next_crit = crit + 0.15
-            next_mult = mult + 0.5
+            next_crit = min(skill.get("max_value", 0.6), crit + skill.get("delta", 0.1))
+            next_mult = mult + skill.get("crit_multiplier_bonus", 0.25)
             initial = f"下次选择: 暴击{int(next_crit*100)}% / {next_mult:.1f}x"
         else:
-            next_crit = crit + 0.15
-            next_mult = mult + 0.5
+            next_crit = min(skill.get("max_value", 0.6), crit + skill.get("delta", 0.1))
+            next_mult = mult + skill.get("crit_multiplier_bonus", 0.25)
             initial = f"下次选择: 暴击{int(next_crit*100)}% / {next_mult:.1f}x"
         current_str = f"暴击 {int(crit*100)}% / {mult:.1f}x"
         return skill["desc"], current_str, initial
@@ -377,28 +381,32 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
         return skill["desc"], current_str, initial
 
     elif key == "has_blades":
-        base_count = skill.get("base_count", 3)
-        base_dmg = skill.get("base_damage", 10)
+        base_dmg = skill.get("base_damage", 12)
+        base_cd = skill.get("base_cooldown", 3.8)
+        base_radius = skill.get("base_radius", 150)
         if is_first:
-            initial = f"激活: {base_count}刃 / 伤{base_dmg}（重复+2伤）"
+            initial = f"激活: 范围{base_radius} / 伤{base_dmg} / {base_cd:.1f}s"
         else:
             current_dmg = stats.get("blade_damage", base_dmg)
-            next_dmg = current_dmg + skill.get("damage_per_stack", 2)
-            initial = f"下次选择: 伤{next_dmg}（+2伤害）"
-        blade_count = stats.get("blade_count", base_count)
+            current_cd = stats.get("nova_cooldown", base_cd)
+            current_radius = stats.get("nova_radius", base_radius)
+            next_dmg = current_dmg + skill.get("damage_per_stack", 3)
+            next_cd = max(skill.get("min_cooldown", 2.2),
+                          current_cd - skill.get("cooldown_reduction", 0.25))
+            initial = f"下次: 伤{next_dmg} / {next_cd:.1f}s / 半径{current_radius+skill.get('radius_per_stack', 12)}"
         current_dmg = stats.get("blade_damage", base_dmg)
-        current_str = f"{blade_count}刃 / 伤{current_dmg}"
+        current_str = f"范围{stats.get('nova_radius', base_radius)} / 伤{current_dmg}"
         return skill["desc"], current_str, initial
 
     elif key == "has_lightning":
-        base_chains = skill.get("base_chains", 8)
-        base_dmg = skill.get("base_damage", 8)
+        base_chains = skill.get("base_chains", 5)
+        base_dmg = skill.get("base_damage", 7)
         if is_first:
-            initial = f"激活: {base_chains}跳 / 伤{base_dmg}（重复+1跳+2伤）"
+            initial = f"激活: {base_chains}跳 / 伤{base_dmg}（重复+1跳+1伤）"
         else:
             current_chains = stats.get("lightning_chains", base_chains)
             current_dmg = stats.get("lightning_damage", base_dmg)
-            initial = f"下次选择: {current_chains+1}跳 / 伤{current_dmg+2}"
+            initial = f"下次选择: {current_chains+1}跳 / 伤{current_dmg+skill.get('damage_per_stack', 1)}"
         chains = stats.get("lightning_chains", base_chains)
         dmg = stats.get("lightning_damage", base_dmg)
         current_str = f"{chains}跳 / 伤{dmg}"
@@ -414,7 +422,9 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
             current_interval = stats.get("trap_interval", base_interval)
             current_dmg = stats.get("trap_damage", base_dmg)
             current_radius = stats.get("trap_radius_mult", base_radius)
-            initial = f"下次: 间隔{current_interval-0.1:.1f}s / 伤{current_dmg+0.5}/s / 范围×{current_radius+0.1:.1f}"
+            next_interval = max(skill.get("min_interval", 1.2),
+                                current_interval - skill.get("interval_reduction", 0.1))
+            initial = f"下次: 间隔{next_interval:.1f}s / 伤{current_dmg+0.5}/s / 范围×{current_radius+skill.get('radius_per_stack', 0.05):.2f}"
         interval = stats.get("trap_interval", base_interval)
         dmg = stats.get("trap_damage", base_dmg)
         radius = stats.get("trap_radius_mult", base_radius)
@@ -424,8 +434,24 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
     return skill["desc"], "", ""
 
 
-def get_random_skills(n=3):
-    return random.sample(SKILL_POOL, min(n, len(SKILL_POOL)))
+def _skill_available(skill, stats):
+    if not stats:
+        return True
+    key = skill["key"]
+    if key == "bullet_speed" and stats.get("bullet_speed", 1.0) >= MAX_BULLET_SPEED_MULT:
+        return False
+    if key == "fire_interval" and stats.get("fire_interval", FIRE_INTERVAL) <= skill.get("min_value", 0):
+        return False
+    if key == "crit_chance" and stats.get("crit_chance", 0.0) >= skill.get("max_value", 1.0):
+        return False
+    return True
+
+
+def get_random_skills(n=3, stats=None):
+    available = [skill for skill in SKILL_POOL if _skill_available(skill, stats)]
+    if not available:
+        available = SKILL_POOL[:]
+    return random.sample(available, min(n, len(available)))
 
 
 def apply_skill(stats, skill):
@@ -448,16 +474,23 @@ def apply_skill(stats, skill):
         else:
             growth = k * (k + 1)  # 偶数：1×2, 2×3, 3×4...
         stats[key] = base + growth
-    # 旋转利刃
+    # 暗影新星（保留 has_blades 字段以兼容旧调用）
     elif key == "has_blades":
         current = stats.get(key, 0)
         stats[key] = current + 1
-        # 第一个时设置初始数量
         if current == 0:
             stats["blade_count"] = skill.get("base_count", 3)
             stats["blade_damage"] = skill.get("base_damage", 10)
+            stats["nova_cooldown"] = skill.get("base_cooldown", 3.8)
+            stats["nova_radius"] = skill.get("base_radius", 150)
         else:
             stats["blade_damage"] += skill.get("damage_per_stack", 2)
+            stats["nova_cooldown"] = max(
+                skill.get("min_cooldown", 2.2),
+                stats.get("nova_cooldown", skill.get("base_cooldown", 3.8)) -
+                skill.get("cooldown_reduction", 0.25)
+            )
+            stats["nova_radius"] = stats.get("nova_radius", skill.get("base_radius", 150)) + skill.get("radius_per_stack", 12)
     # 连锁闪电
     elif key == "has_lightning":
         current = stats.get(key, 0)
@@ -479,13 +512,17 @@ def apply_skill(stats, skill):
             stats["trap_damage"] = skill.get("base_damage", 4)
             stats["trap_radius_mult"] = skill.get("base_radius_mult", 1.0)
         else:
-            stats["trap_interval"] -= skill.get("interval_reduction", 0.1)
+            stats["trap_interval"] = max(
+                skill.get("min_interval", 1.2),
+                stats["trap_interval"] - skill.get("interval_reduction", 0.1)
+            )
             stats["trap_damage"] += skill.get("damage_per_stack", 0.5)
             stats["trap_radius_mult"] += skill.get("radius_per_stack", 0.1)
     # 致命节奏 - 暴击率和暴击伤害
     elif key == "crit_chance":
-        stats[key] += skill["delta"]
-        if "crit_multiplier_bonus" in skill:
+        before = stats[key]
+        stats[key] = min(skill.get("max_value", 1.0), stats[key] + skill["delta"])
+        if stats[key] > before and "crit_multiplier_bonus" in skill:
             current_crit_mult = stats.get("crit_multiplier", 2.0)
             stats["crit_multiplier"] = current_crit_mult + skill["crit_multiplier_bonus"]
     # 贪婪之魂 - 经验倍率计数
@@ -494,11 +531,7 @@ def apply_skill(stats, skill):
     # 急速子弹 - 子弹速度倍率
     elif key == "bullet_speed":
         current_speed = stats.get(key, 1.0)
-        if current_speed >= MAX_BULLET_SPEED_MULT:
-            # 速度已达上限，改为增加伤害倍率
-            current_dmg_mult = stats.get("bullet_speed_damage_mult", 1.0)
-            stats["bullet_speed_damage_mult"] = current_dmg_mult * 1.2
-        else:
+        if current_speed < MAX_BULLET_SPEED_MULT:
             new_mult = current_speed * skill["factor"]
             stats[key] = min(new_mult, MAX_BULLET_SPEED_MULT)
     # 普通delta技能
@@ -529,6 +562,8 @@ def apply_skill(stats, skill):
     # factor技能
     elif "factor" in skill:
         stats[key] *= skill["factor"]
+        if "min_value" in skill:
+            stats[key] = max(skill["min_value"], stats[key])
 
     if "side_effect" in skill:
         side_key, side_val, side_mode = skill["side_effect"]

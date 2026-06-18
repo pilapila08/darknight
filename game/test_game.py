@@ -17,6 +17,7 @@ from settings import (
 )
 from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
 from entities import XpOrb, Particle, DamageNumber, Explosion, TrapManager
+from entities import HealthPack, ShieldPickup
 from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
 from systems import Camera, AudioManager, load_high_score, save_high_score
@@ -29,6 +30,7 @@ from ui import (
     get_font, draw_pause_menu
 )
 from ui.boss_hud import draw_boss_hp_bar
+from ui.render_helpers import draw_ground_shadow, draw_shadowed_sprite
 from game.state import GameState
 from game.test_mode import TestModeHandler
 
@@ -72,6 +74,7 @@ class TestGame:
         self.bullets = pygame.sprite.Group()
         self.enemy_bullets = pygame.sprite.Group()
         self.orbs = pygame.sprite.Group()
+        self.drops = pygame.sprite.Group()
         self.particles = pygame.sprite.Group()
         self.damage_numbers = []
         self.explosions = []
@@ -460,6 +463,7 @@ class TestGame:
 
         # 经验球
         self._update_orbs()
+        self._update_drops(dt)
 
         # 区域效果更新
         self._update_area_effects(dt)
@@ -605,7 +609,7 @@ class TestGame:
 
     def _update_weapons(self, dt):
         """更新武器系统"""
-        # 旋转利刃
+        # 暗影新星
         if self.game_state.stats.get("has_blades", 0) > 0:
             self.blade_mgr.update(dt)
             blade_hits = self.blade_mgr.check_damage(self.player.rect, self.enemies, dt, self.game_state.stats)
@@ -763,18 +767,42 @@ class TestGame:
             base_xp = 1
 
         greedy_count = self.game_state.stats.get("greedy_count", 0)
-        greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
+        greedy_mult = 1.0 + 0.15 * greedy_count
         xp_gained = base_xp * greedy_mult * self.game_state.test_xp_multiplier
 
         self.audio.play_enemy_death()
         self.game_state.score += 1
         self.game_state.experience += xp_gained
+        self._maybe_drop_item(enemy)
         enemy.kill()
+
+    def _maybe_drop_item(self, enemy):
+        hp_ratio = self.game_state.player_hp / max(1, self.game_state.stats["max_hp"])
+        tier = min(int(self.game_state.elapsed_time / GROWTH_INTERVAL), DIFFICULTY_MAX_TIER)
+        health_chance = 0.025 + (0.075 if hp_ratio <= 0.35 else 0.0)
+        shield_chance = 0.018 + tier * 0.006
+        if enemy.is_elite:
+            health_chance += 0.045
+            shield_chance += 0.055
+        if self.game_state.player_shield >= self.game_state.player_max_shield * 0.7:
+            shield_chance *= 0.35
+        roll = random.random()
+        if roll < health_chance:
+            amount = 5 if enemy.is_elite else 4
+            self.drops.add(HealthPack(enemy.rect.centerx, enemy.rect.centery, amount))
+        elif roll < health_chance + shield_chance:
+            amount = 6 if enemy.is_elite else 4 + tier
+            self.drops.add(ShieldPickup(enemy.rect.centerx, enemy.rect.centery, amount))
 
     def _damage_player(self, damage, knockback_x, knockback_y):
         """伤害玩家"""
         if self.game_state.invincible_timer <= 0:
-            self.game_state.player_hp -= damage * self.game_state.stats["damage_taken"]
+            final_damage = damage * self.game_state.stats["damage_taken"]
+            if self.game_state.player_shield > 0:
+                absorbed = min(self.game_state.player_shield, final_damage)
+                self.game_state.player_shield -= absorbed
+                final_damage -= absorbed
+            self.game_state.player_hp -= final_damage
             self.game_state.invincible_timer = PLAYER_INVINCIBLE_TIME
 
     def _check_explosions(self):
@@ -801,6 +829,22 @@ class TestGame:
             if orb.rect.colliderect(self.player.rect):
                 orb.kill()
 
+    def _update_drops(self, dt):
+        for drop in list(self.drops):
+            drop.update(dt, self.player.rect)
+            if drop.rect.colliderect(self.player.rect):
+                if drop.kind == "health":
+                    self.game_state.player_hp = min(
+                        self.game_state.stats["max_hp"],
+                        self.game_state.player_hp + drop.amount
+                    )
+                elif drop.kind == "shield":
+                    self.game_state.player_shield = min(
+                        self.game_state.player_max_shield,
+                        self.game_state.player_shield + drop.amount
+                    )
+                drop.kill()
+
     def _check_level_up(self):
         """检查升级"""
         xp_for_current = self._get_xp_for_level(self.game_state.level)
@@ -812,8 +856,8 @@ class TestGame:
             self.game_state.level += 1
             self.game_state.paused = True
             self.game_state.chosen_skills = self._get_random_skills(3)
-            self.game_state.stats["max_hp"] += 2
-            self.game_state.player_hp = min(self.game_state.player_hp + 3, self.game_state.stats["max_hp"])
+            self.game_state.stats["max_hp"] += 1
+            self.game_state.player_hp = min(self.game_state.player_hp + 1, self.game_state.stats["max_hp"])
             self.player.max_hp = self.game_state.stats["max_hp"]
             self.audio.play_level_up()
 
@@ -831,7 +875,7 @@ class TestGame:
     def _get_random_skills(self, count):
         """随机获取技能"""
         from skills import get_random_skills as original_get_random_skills
-        return original_get_random_skills(count)
+        return original_get_random_skills(count, self.game_state.stats)
 
     def _check_game_end(self):
         """检查游戏结束（仅死亡）"""
@@ -852,14 +896,23 @@ class TestGame:
         if self.game_state.stats.get("has_traps", 0) > 0:
             for trap in self.trap_mgr.group:
                 self.screen.blit(trap.image, self.camera.apply(trap.rect))
+        for drop in self.drops:
+            draw_shadowed_sprite(self.screen, self.camera, drop.image, drop.rect, shadow_scale=0.7, shadow_alpha=70)
 
-        # 实体
-        self.player.draw(self.screen, self.camera)
-        for enemy in self.enemies:
-            self.screen.blit(enemy.image, self.camera.apply(enemy.rect))
-        for boss in self.bosses:
-            boss.draw(self.screen, self.camera)
-            boss.draw_hp_bar_bg(self.screen, self.dmg_font, self.camera)
+        # 实体按脚底位置排序，避免近处角色被远处角色盖住
+        world_entities = [(self.player.rect.bottom, "player", self.player)]
+        world_entities.extend((enemy.rect.bottom, "enemy", enemy)
+                              for enemy in self.enemies if not isinstance(enemy, Boss))
+        world_entities.extend((boss.rect.bottom, "boss", boss) for boss in self.bosses)
+        for _, kind, entity in sorted(world_entities, key=lambda item: item[0]):
+            if kind == "player":
+                entity.draw(self.screen, self.camera)
+            elif kind == "boss":
+                draw_ground_shadow(self.screen, self.camera, entity.rect, scale=1.35, alpha=125)
+                entity.draw(self.screen, self.camera)
+                entity.draw_hp_bar_bg(self.screen, self.dmg_font, self.camera)
+            else:
+                draw_shadowed_sprite(self.screen, self.camera, entity.image, entity.rect)
         for bullet in self.bullets:
             self.screen.blit(bullet.image, self.camera.apply(bullet.rect))
         for eb in self.enemy_bullets:
@@ -897,7 +950,8 @@ class TestGame:
         xp_to_next = xp_for_next - xp_for_current
         current_max_hp = self.game_state.stats.get("max_hp", PLAYER_MAX_HP)
         draw_hud(self.screen, self.font, self.game_state.level, self.game_state.experience, xp_to_next,
-                 self.game_state.player_hp, current_max_hp, self.game_state.elapsed_time)
+                 self.game_state.player_hp, current_max_hp, self.game_state.elapsed_time,
+                 self.game_state.player_shield, self.game_state.player_max_shield)
         draw_skill_bar(self.screen, self.font, self.game_state.acquired_skills,
                       mouse_pos, self.game_state.elapsed_time, self.game_state.stats)
 
@@ -952,7 +1006,7 @@ class TestGame:
         time_str = f"{self.game_state.elapsed_time:.0f}s"
         bc = self.game_state.stats["bullet_count"]
         map_name = self.map_manager.map_data["name"]
-        title = f"[测试] 击杀:{self.game_state.score} | DPS:{player_dps:.0f} | {time_str} | {map_name} | 刀:{bc+1}"
+        title = f"[测试] 击杀:{self.game_state.score} | DPS:{player_dps:.0f} | {time_str} | {map_name} | 新星:{self.game_state.stats.get('has_blades', 0)}"
         pygame.display.set_caption(title)
 
     # --- Boss System (mirrored from NormalGame) ---
@@ -1060,7 +1114,7 @@ class TestGame:
                                         boss.config.get("color", (255, 50, 50))))
         self.camera.shake(0.5, 15)
         greedy_count = self.game_state.stats.get("greedy_count", 0)
-        greedy_mult = 1.25 ** greedy_count if greedy_count > 0 else 1.0
+        greedy_mult = 1.0 + 0.15 * greedy_count
         self.game_state.experience += int(20 * greedy_mult * self.game_state.test_xp_multiplier)
         self.game_state.score += 50
         boss.kill()

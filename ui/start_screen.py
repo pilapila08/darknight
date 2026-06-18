@@ -27,7 +27,7 @@ def draw_start_screen(screen, big_font, font, small_font, test_activated=False):
         "击杀敌人掉落经验球  →  升级  →  选择强化",
         "",
         "武器系统：",
-        "  旋转利刃 — 环绕自身的刀刃",
+        "  暗影新星 — 周期性释放范围冲击波",
         "  连锁闪电 — 弹跳打击多个敌人",
         "  剧毒地雷 — 自动释放毒圈",
         "",

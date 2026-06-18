@@ -7,7 +7,7 @@ from effects.asset_loader import load_image
 class XpOrb(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        frames = load_image("xp_orb", YELLOW, ORB_RADIUS, animated=False)
+        frames = load_image("xp_orb", YELLOW, ORB_RADIUS * 2, animated=False)
         self.image = frames[0]
         self.rect = self.image.get_rect(center=(x, y))
 

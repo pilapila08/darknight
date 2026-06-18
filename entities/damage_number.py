@@ -4,7 +4,12 @@ from settings import WHITE
 
 class DamageNumber:
     def __init__(self, x, y, amount, font):
-        self.text = font.render(str(amount), True, WHITE)
+        raw = font.render(str(amount), True, WHITE)
+        self.text = pygame.Surface((raw.get_width() + 4, raw.get_height() + 4), pygame.SRCALPHA)
+        outline = font.render(str(amount), True, (25, 10, 10))
+        for ox, oy in ((0, 2), (2, 0), (2, 4), (4, 2)):
+            self.text.blit(outline, (ox, oy))
+        self.text.blit(raw, (2, 2))
         self.x = x
         self.y = y
         self.lifetime = 0.8

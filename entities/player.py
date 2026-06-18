@@ -2,6 +2,7 @@ import pygame
 from settings import MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, PLAYER_MAX_HP, WHITE
 from entities.animation import Animation
 from effects.asset_loader import load_image
+from ui.render_helpers import draw_ground_shadow
 
 
 class Player:
@@ -42,4 +43,9 @@ class Player:
 
     def draw(self, screen, camera):
         screen_rect = camera.apply(self.rect)
+        draw_ground_shadow(screen, camera, self.rect, scale=1.2, alpha=115)
+        glow = pygame.Surface((self.rect.width + 20, 12), pygame.SRCALPHA)
+        pygame.draw.ellipse(glow, (90, 190, 255, 70), glow.get_rect())
+        screen.blit(glow, (screen_rect.centerx - glow.get_width() // 2,
+                           screen_rect.bottom - glow.get_height() // 2))
         screen.blit(self.anim.get_image(), screen_rect)

@@ -137,7 +137,7 @@ class Boss(Enemy):
     def __init__(self, x, y, config):
         super().__init__(x, y, hp=config["hp"], speed=config["speed"],
                          size=config["size"], color=config["color"],
-                         sprite_name=None, contact_damage=config["damage"],
+                         sprite_name=config.get("sprite_name"), contact_damage=config["damage"],
                          is_elite=False)
         self.config = config
         self.boss_index = config["index"]
@@ -153,7 +153,10 @@ class Boss(Enemy):
         attacks = self._do_attacks(dt, player_rect)
         move_attacks = self._do_movement(dt, player_rect)
         self._anim.update(dt)
-        self.image = self._anim.get_image()
+        if self.flash_timer > 0:
+            self.image = self._flash_frames[self._anim.current]
+        else:
+            self.image = self._normal_frames[self._anim.current]
         if move_attacks:
             if attacks:
                 attacks.extend(move_attacks)
@@ -193,6 +196,7 @@ class CorpseKing(Boss):
             "index": 0, "name": "尸王", "hp": CORPSE_KING_HP, "damage": CORPSE_KING_DAMAGE,
             "size": CORPSE_KING_SIZE, "color": CORPSE_KING_COLOR, "speed": CORPSE_KING_SPEED,
             "attack_interval": CORPSE_KING_ATTACK_INTERVAL, "spawn_time": BOSS_1_TIME,
+            "sprite_name": "boss_corpse_king",
         }
         super().__init__(x, y, config)
         self.charging = False
@@ -248,6 +252,7 @@ class ShadowMage(Boss):
             "index": 1, "name": "暗影巫师", "hp": SHADOW_MAGE_HP, "damage": SHADOW_MAGE_DAMAGE,
             "size": SHADOW_MAGE_SIZE, "color": SHADOW_MAGE_COLOR, "speed": SHADOW_MAGE_SPEED,
             "attack_interval": SHADOW_MAGE_ATTACK_INTERVAL, "spawn_time": BOSS_2_TIME,
+            "sprite_name": "boss_shadow_mage",
         }
         super().__init__(x, y, config)
         self.teleport_timer = 0.0
@@ -301,6 +306,7 @@ class IronColossus(Boss):
             "index": 2, "name": "钢铁巨像", "hp": IRON_COLOSSUS_HP, "damage": IRON_COLOSSUS_DAMAGE,
             "size": IRON_COLOSSUS_SIZE, "color": IRON_COLOSSUS_COLOR, "speed": IRON_COLOSSUS_SPEED,
             "attack_interval": IRON_COLOSSUS_ATTACK_INTERVAL, "spawn_time": BOSS_3_TIME,
+            "sprite_name": "boss_iron_colossus",
         }
         super().__init__(x, y, config)
         self.armor_active = False
@@ -353,6 +359,7 @@ class VoidLord(Boss):
             "index": 3, "name": "虚空之主", "hp": VOID_LORD_HP, "damage": VOID_LORD_DAMAGE,
             "size": VOID_LORD_SIZE, "color": VOID_LORD_COLOR, "speed": VOID_LORD_SPEED,
             "attack_interval": VOID_LORD_ATTACK_INTERVAL, "spawn_time": BOSS_4_TIME,
+            "sprite_name": "boss_void_lord",
         }
         super().__init__(x, y, config)
         self.enraged = False
@@ -425,21 +432,21 @@ BOSS_CONFIGS = [
     {
         "index": 0, "name": "尸王", "hp": CORPSE_KING_HP, "damage": CORPSE_KING_DAMAGE,
         "size": CORPSE_KING_SIZE, "color": CORPSE_KING_COLOR, "speed": CORPSE_KING_SPEED,
-        "spawn_time": BOSS_1_TIME, "cls": CorpseKing,
+        "spawn_time": BOSS_1_TIME, "cls": CorpseKing, "sprite_name": "boss_corpse_king",
     },
     {
         "index": 1, "name": "暗影巫师", "hp": SHADOW_MAGE_HP, "damage": SHADOW_MAGE_DAMAGE,
         "size": SHADOW_MAGE_SIZE, "color": SHADOW_MAGE_COLOR, "speed": SHADOW_MAGE_SPEED,
-        "spawn_time": BOSS_2_TIME, "cls": ShadowMage,
+        "spawn_time": BOSS_2_TIME, "cls": ShadowMage, "sprite_name": "boss_shadow_mage",
     },
     {
         "index": 2, "name": "钢铁巨像", "hp": IRON_COLOSSUS_HP, "damage": IRON_COLOSSUS_DAMAGE,
         "size": IRON_COLOSSUS_SIZE, "color": IRON_COLOSSUS_COLOR, "speed": IRON_COLOSSUS_SPEED,
-        "spawn_time": BOSS_3_TIME, "cls": IronColossus,
+        "spawn_time": BOSS_3_TIME, "cls": IronColossus, "sprite_name": "boss_iron_colossus",
     },
     {
         "index": 3, "name": "虚空之主", "hp": VOID_LORD_HP, "damage": VOID_LORD_DAMAGE,
         "size": VOID_LORD_SIZE, "color": VOID_LORD_COLOR, "speed": VOID_LORD_SPEED,
-        "spawn_time": BOSS_4_TIME, "cls": VoidLord,
+        "spawn_time": BOSS_4_TIME, "cls": VoidLord, "sprite_name": "boss_void_lord",
     },
 ]
