@@ -8,7 +8,10 @@ from settings import (
     SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP, ENEMY_SPEED, MAX_ENEMIES,
     ELITE_SIZE, ELITE_SPEED, ELITE_HP, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
     DIFFICULTY_INTERVAL, DIFFICULTY_MAX_TIER, HP_BONUS_PER_TIER, DAMAGE_BONUS_PER_TIER,
-    GROWTH_INTERVAL, SPAWN_RATE_CAP,
+    DAMAGE_BONUS_MAX, GROWTH_INTERVAL,
+    SPAWN_RATE_CAP_BASE, SPAWN_CAP_PER_BOSS,
+    BOSS_FIGHT_SPAWN_SLOWDOWN, FINAL_SURGE_INTERVAL_MULT,
+    BULLET_PENALTY_THRESHOLD, BULLET_PENALTY_MULT,
     PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
     MAP_WIDTH, MAP_HEIGHT, XP_BASE, XP_GROWTH,
     BOSS_WARNING_DURATION, MAP_TRANSITION_DURATION,
@@ -409,8 +412,14 @@ class TestGame:
             self.game_state.invincible_timer -= dt
 
         self.game_state.difficulty_level = int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL)
-        time_factor = min(self.game_state.elapsed_time / 30, SPAWN_RATE_CAP)
+        # R4：tf_cap = 5 + 1.5×boss击杀；Boss 战期间普通刷怪减速；终局加速
+        tf_cap = SPAWN_RATE_CAP_BASE + SPAWN_CAP_PER_BOSS * self.game_state.boss_defeated_count
+        time_factor = min(self.game_state.elapsed_time / 30, tf_cap)
         current_spawn_interval = SPAWN_INTERVAL / (1 + time_factor * 0.3 + (time_factor * 0.15) ** 2)
+        if self.game_state.boss_active:
+            current_spawn_interval *= BOSS_FIGHT_SPAWN_SLOWDOWN
+        if self.game_state.elapsed_time >= GAME_DURATION_SECONDS - 60:
+            current_spawn_interval *= FINAL_SURGE_INTERVAL_MULT
 
         keys = pygame.key.get_pressed()
         self.player.update(dt, keys)
@@ -492,7 +501,7 @@ class TestGame:
         tier = tier_override if tier_override is not None else min(
             int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL), DIFFICULTY_MAX_TIER)
         hp_bonus = tier * HP_BONUS_PER_TIER
-        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
+        damage_bonus = min(tier * DAMAGE_BONUS_PER_TIER, DAMAGE_BONUS_MAX)
 
         if enemy_type_override:
             enemy_type = enemy_type_override
@@ -525,10 +534,10 @@ class TestGame:
         return Enemy(x, y, hp=ENEMY_HP + hp_bonus, contact_damage=1 + damage_bonus)
 
     def _get_current_enemy_stats(self):
-        """获取当前游戏时间下各敌人的数值（线性+上限）"""
+        """获取当前游戏时间下各敌人的数值（线性+上限；R4：伤害封顶）"""
         tier = min(int(self.game_state.elapsed_time / GROWTH_INTERVAL), DIFFICULTY_MAX_TIER)
         hp_bonus = tier * HP_BONUS_PER_TIER
-        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
+        damage_bonus = min(tier * DAMAGE_BONUS_PER_TIER, DAMAGE_BONUS_MAX)
 
         return {
             "basic": {
@@ -593,6 +602,8 @@ class TestGame:
             if target:
                 bullet_count = self.game_state.stats["bullet_count"]
                 bullet_speed_mult = self.game_state.stats.get("bullet_speed", 1.0)
+                pierce = self.game_state.stats.get("bullet_pierce", 0)
+                pierce_dmg_mult = self.game_state.stats.get("bullet_damage_mult", 1.0)
                 dx = target.rect.centerx - self.player.rect.centerx
                 dy = target.rect.centery - self.player.rect.centery
                 base_angle = math.atan2(dy, dx)
@@ -609,7 +620,11 @@ class TestGame:
                     angle = base_angle + offset
                     tx = self.player.rect.centerx + math.cos(angle) * 100
                     ty = self.player.rect.centery + math.sin(angle) * 100
-                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty), bullet_speed_mult))
+                    # R3：第 4 发起每发伤害 ×0.55 + 穿透
+                    per_bullet = BULLET_PENALTY_MULT if i >= BULLET_PENALTY_THRESHOLD else 1.0
+                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery,
+                                            (tx, ty), bullet_speed_mult,
+                                            pierce=pierce, damage_mult=pierce_dmg_mult * per_bullet))
             self.audio.play_shoot()
 
     def _update_weapons(self, dt):
@@ -665,23 +680,34 @@ class TestGame:
             if not (0 <= eb.rect.centerx <= MAP_WIDTH and 0 <= eb.rect.centery <= MAP_HEIGHT):
                 eb.kill()
 
+    def _apply_bullet_hit(self, bullet, enemy):
+        """对单个敌人结算一次子弹命中；支持穿透（同一目标不重复命中）。"""
+        if id(enemy) in bullet._hit_ids:
+            return
+        bullet._hit_ids.add(id(enemy))
+        self._damage_enemy(bullet, enemy)
+        if bullet.pierce > 0:
+            bullet.pierce -= 1
+        else:
+            bullet.kill()
+
     def _check_collisions(self):
         """碰撞检测"""
-        # 子弹碰撞敌人
+        # 子弹碰撞敌人（R3 B1：穿透弹可命中多个目标）
         hits = pygame.sprite.groupcollide(self.bullets, self.enemies, False, False)
         for bullet, hit_enemies in hits.items():
-            bullet.kill()
             for enemy in hit_enemies:
-                self._damage_enemy(bullet, enemy)
-                break
+                self._apply_bullet_hit(bullet, enemy)
+                if not bullet.alive():
+                    break
 
         # 子弹碰撞Boss
         for bullet in list(self.bullets):
             for boss in self.bosses:
                 if bullet.rect.colliderect(boss.rect):
-                    self._damage_enemy(bullet, boss)
-                    bullet.kill()
-                    break
+                    self._apply_bullet_hit(bullet, boss)
+                    if not bullet.alive():
+                        break
 
         # Boss弹幕碰撞玩家
         if self.game_state.invincible_timer <= 0:
@@ -728,6 +754,8 @@ class TestGame:
     def _damage_enemy(self, bullet, enemy):
         """伤害敌人"""
         dmg = self.game_state.stats["bullet_damage"]
+        # R3：每发子弹伤害倍率（弹量边际惩罚 ×0.55 / 穿透弹 ×0.85）
+        dmg *= getattr(bullet, "damage_mult", 1.0)
         # 急速子弹速度达上限后的伤害加成（独立于火力增强）
         dmg *= self.game_state.stats.get("bullet_speed_damage_mult", 1.0)
         is_crit = random.random() < self.game_state.stats["crit_chance"]

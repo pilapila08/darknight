@@ -1,7 +1,9 @@
 import math
 import pygame
 
-from settings import CYAN, PURPLE
+from settings import CYAN, PURPLE, SKILL_DEFS
+
+_NOVA = SKILL_DEFS["nova"]
 
 
 class OrbitalBladeManager:
@@ -22,13 +24,13 @@ class OrbitalBladeManager:
         self.pulses = [p for p in self.pulses if p["age"] < p["duration"]]
 
     def check_damage(self, player_rect, enemies, dt, stats):
-        cooldown = stats.get("nova_cooldown", 3.8)
+        cooldown = stats.get("nova_cooldown", _NOVA["base_cooldown"])
         if self.cooldown_timer > 0:
             return []
         self.cooldown_timer = cooldown
 
-        radius = stats.get("nova_radius", 150)
-        damage = stats.get("blade_damage", 12)
+        radius = stats.get("nova_radius", _NOVA["base_radius"])
+        damage = stats.get("blade_damage", _NOVA["base_damage"])
         self.pulses.append({
             "x": player_rect.centerx,
             "y": player_rect.centery,
@@ -69,7 +71,7 @@ class OrbitalBladeManager:
 
         cooldown = max(0.0, self.cooldown_timer)
         if cooldown > 0:
-            ready = 1 - min(1.0, cooldown / 3.8)
+            ready = 1 - min(1.0, cooldown / _NOVA["base_cooldown"])
             radius = 24 + int(10 * ready)
             pos = camera.apply(pygame.Rect(player_rect.centerx, player_rect.centery, 0, 0))
             surf = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)

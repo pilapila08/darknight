@@ -25,7 +25,6 @@ ENEMY_SIZE = 28
 ENEMY_SPEED = 195  # pixels per second (was 130)
 ENEMY_HP = 1
 SPAWN_INTERVAL = 0.80  # seconds (放缓初始刷怪间隔)
-SPAWN_RATE_CAP = 5     # time_factor上限 (~150s后刷怪速率恒定)
 MAX_ENEMIES = 150  # 最多敌人数量（性能优化）
 
 # Elite Enemy
@@ -33,6 +32,9 @@ ELITE_SIZE = 40
 ELITE_SPEED = 113  # was 75
 ELITE_HP = 4
 ELITE_CHANCE = 0.22
+ELITE_CHANCE_RAMP_PER_BOSS = 0.05  # R4: 精英概率斜坡 +0.05/击杀
+ELITE_CHANCE_RAMP_PER_MIN = 0.01   # R4: 精英概率斜坡 +0.01/分钟
+ELITE_CHANCE_MAX = 0.45            # R4: 精英概率封顶
 ELITE_ACTIVATION = 90    # seconds until elites appear (was 120)
 
 # Charger
@@ -61,12 +63,28 @@ EXPLODER_COLOR = (200, 50, 200)
 ENEMY_BULLET_RADIUS = 4
 ENEMY_BULLET_SPEED = 180
 
-# Difficulty Scaling (线性增长 + 上限)
+# Difficulty Scaling (R4 方案A：线性档位 + 伤害封顶，无冻结段)
 DIFFICULTY_INTERVAL = 34  # seconds per tier (45*0.75, 节奏加快25%)
-DIFFICULTY_MAX_TIER = 4   # ~136s后难度停止增长
-HP_BONUS_PER_TIER = 1     # 每档+1HP (max +4 at ~136s)
-DAMAGE_BONUS_PER_TIER = 1 # 每档+1伤害 (max +4 at ~136s)
+DIFFICULTY_MAX_TIER = 17  # R4: 34×17=578s，接近终局仍缓涨（原4→136s冻结，已修复）
+HP_BONUS_PER_TIER = 1     # 每档+1HP，持续线性涨至 17
+DAMAGE_BONUS_PER_TIER = 1 # 每档+1伤害，由 DAMAGE_BONUS_MAX 封顶
+DAMAGE_BONUS_MAX = 8      # R4: 普通怪接触伤上限 1+8=9（防终局一击死螺旋）
 SPAWN_RATE_FACTOR = 0.90
+
+# 刷怪密度（R4：tf_cap 随 Boss 击杀递增，修复 150s 刷怪封顶平台期）
+SPAWN_RATE_CAP_BASE = 5      # tf 基础上限（原 SPAWN_RATE_CAP=5，已重命名）
+SPAWN_CAP_PER_BOSS = 1.5     # 每击杀一个 Boss，tf_cap +1.5（终局 5+1.5×4=11 → 8.78 只/s）
+# Boss 战节奏（R4 §2.4）
+BOSS_FIGHT_SPAWN_SLOWDOWN = 1.5   # Boss 战期间普通刷怪间隔 ×1.5（速率 ×0.67）
+BOSS_REINFORCE_DELAY = 45.0       # Boss 战超过 45s 后开始出增援波
+BOSS_REINFORCE_INTERVAL = 15.0    # 增援波间隔
+BOSS_REINFORCE_BASIC_COUNT = 4    # 增援波基础怪数量
+BOSS_REINFORCE_CHARGER_COUNT = 1  # 增援波冲锋怪数量
+# 终局冲锋（R4 §2.5：最后 60s）
+FINAL_SURGE_INTERVAL_MULT = 0.8   # 刷怪间隔 ×0.8（速率 ×1.25）
+FINAL_SURGE_ELITE_BONUS = 0.10    # 精英概率 +0.10
+FINAL_SURGE_WAVE_INTERVAL = 20.0  # 包围波间隔
+FINAL_SURGE_WAVE_COUNT = 8        # 包围波数量（环形入场）
 
 # Time-based Growth
 GROWTH_INTERVAL = 34     # 怪物成长时间间隔（与DIFFICULTY_INTERVAL一致）
@@ -79,37 +97,37 @@ ELITE_DAMAGE_MULT = 2.0  # 精英怪伤害倍率
 FIRE_INTERVAL = 0.6  # seconds (was 0.8)
 BULLET_RADIUS = 5
 BULLET_SPEED = 450  # pixels per second (was 400)
+BULLET_BASE_DAMAGE = 2    # R3: 基础子弹伤害（替换 state.py 硬编码，C7）
+BULLET_COUNT_BASE = 1     # R3: 基础弹量（替换 state.py 硬编码）
 MAX_BULLET_SPEED_MULT = 10.0  # 子弹速度倍率上限
+# 技能平衡（R3 §4.2 / §4.3）
+BULLET_PENALTY_THRESHOLD = 3  # 第 4 发起（含）进入边际惩罚（0 基索引 ≥3）
+BULLET_PENALTY_MULT = 0.55    # 第 4 发起每发伤害 ×0.55
+BULLET_PIERCE_MAX = 3         # 穿透弹最多 3 层（达上限移出池）
+BULLET_PIERCE_DAMAGE_MULT = 0.85  # 穿透弹伤害 ×0.85/发（首次选取，重复不再衰减）
+# 联动技能（R3 §4.4）
+STATIC_OVERLOAD_CD_REDUCTION = 0.15  # 静电过载：闪电每次命中使新星当前 CD -0.15s
+DEATH_ECHO_RADIUS = 200              # 死亡回响：爆炸范围
+DEATH_ECHO_DAMAGE = 12               # 死亡回响：伤害
 
 # XP / Level
-ORB_RADIUS = 5
-ORB_SPEED = 640       # magnetized flight speed (was 320, 2x)
-PICKUP_RANGE = 144    # was 90, 1.6x scale
-XP_PER_ORB = 1
 XP_BASE = 14          # 1→2级所需经验（放缓前期升级节奏）
 XP_GROWTH = 1.15      # 每级经验×1.15 (几何增长，抬高中后期需求)
 
-# Orbital Blades
-BLADE_DAMAGE = 8        # DPS per blade
-BLADE_ORBIT_RADIUS = 88  # was 55, 1.6x scale
-BLADE_ORBIT_SPEED = 3.0  # rad/s
-BLADE_SIZE = 14
-BLADE_COLOR = (180, 220, 255)
+# Orbital Blades (deprecated block removed: BLADE_DAMAGE / BLADE_ORBIT_* 死常量已删，
+# 暗影新星权威值见下方 SKILL_DEFS["nova"])
 
-# Chain Lightning
+# Chain Lightning（伤害/跳数权威值见 SKILL_DEFS["lightning"]；此处保留冷却/范围/衰减）
 LIGHTNING_COOLDOWN = 2.0
-LIGHTNING_DAMAGE = 8
-LIGHTNING_CHAINS = 3
 LIGHTNING_CHAIN_RANGE = 240  # was 150, 1.6x scale
 LIGHTNING_DECAY = 0.7     # damage multiplier per bounce
 LIGHTNING_COLOR = (100, 200, 255)
 
-# Acid Trap
-TRAP_INTERVAL = 2.0      # seconds between drops while moving
+# Acid Trap（伤害权威值见 SKILL_DEFS["trap"]；TRAP_INTERVAL 已删，interval 唯一源=skills）
+TRAP_DAMAGE_BASE = 4      # R3: 剧毒地雷伤害唯一源（每 tick，tick=1.0s）
 TRAP_DURATION = 12.0       # 陷阱持续时间
 TRAP_RADIUS = 45          # was 28, 1.6x scale
 TRAP_DOT_DURATION = 3.0  # total DoT time on enemy
-TRAP_DOT_DAMAGE = 4      # damage per tick
 TRAP_DOT_TICK = 1.0      # seconds between ticks
 TRAP_COLOR = (100, 220, 80)
 
@@ -179,7 +197,7 @@ IRON_COLOSSUS_FIST_RADIUS = 12
 
 # Boss 4: Void Lord (虚空之主)
 BOSS_4_TIME = 480
-VOID_LORD_HP = 8000
+VOID_LORD_HP = 5500   # R4: 8000→5500（击杀窗口校准 20-30s，原推导 53-80s 过肉）
 VOID_LORD_DAMAGE = 70
 VOID_LORD_SIZE = 90
 VOID_LORD_COLOR = (180, 0, 200)
@@ -188,7 +206,8 @@ VOID_LORD_ATTACK_INTERVAL = 2.0
 VOID_LORD_VOID_RIFT_DAMAGE = 20
 VOID_LORD_VOID_RIFT_RADIUS = 50
 VOID_LORD_VOID_RIFT_DURATION = 8.0
-VOID_LORD_GRAVITY_STRENGTH = 100
+VOID_LORD_GRAVITY_STRENGTH = 100  # 引力牵引速度（px/s，越靠近裂隙中心越强，最大=此值）
+VOID_LORD_GRAVITY_RADIUS = 300    # 引力场牵引半径（px，裂隙核心伤害半径见 VOID_LORD_VOID_RIFT_RADIUS）
 VOID_LORD_BARRAGE_COUNT = 12
 VOID_LORD_BARRAGE_DAMAGE = 30
 VOID_LORD_ENRAGE_THRESHOLD = 0.3
@@ -216,4 +235,43 @@ WALK_ANIM_PER_TYPE = {
     "ranger":   {"amp": 1.5, "freq": 1.6, "squash": 0.08, "shadow_fade": 0.30},
     "elite":    {"amp": 2.5, "freq": 1.5, "squash": 0.07, "shadow_fade": 0.30},
     "boss":     {"amp": 4.0, "freq": 0.9, "squash": 0.04, "shadow_fade": 0.30},
+}
+
+# ---- R3 权威技能定义块（settings.py 为唯一源，skills.py 等只引用）----
+# 依据：design/gdd/playability-pack-v1.md §1.2。运行时真值为准。
+SKILL_DEFS = {
+    # 暗影新星（C3/C4 真值：12/+3/3.8s/150）
+    "nova": {
+        "base_count": 1,
+        "base_damage": 12,
+        "damage_per_stack": 3,
+        "base_cooldown": 3.8,
+        "cooldown_reduction": 0.25,
+        "min_cooldown": 2.2,
+        "base_radius": 150,
+        "radius_per_stack": 12,
+    },
+    # 连锁闪电（C1 真值：5跳/7伤，+1跳+1伤/层）
+    "lightning": {
+        "base_chains": 5,
+        "base_damage": 7,
+        "chains_per_stack": 1,
+        "damage_per_stack": 1,
+    },
+    # 剧毒地雷（C5/C6 真值：interval 唯一源 + 伤害 4/tick）
+    "trap": {
+        "base_interval": 2.0,
+        "interval_reduction": 0.1,
+        "min_interval": 1.2,
+        "base_damage": 4,
+        "damage_per_stack": 0.5,
+        "base_radius_mult": 1.0,
+        "radius_per_stack": 0.05,
+    },
+    # 穿透弹（R3 §4.3 B1：弹速×1.5 保留 + 穿透+1/层 + 伤害×0.85，3层封顶）
+    "pierce": {
+        "factor": 1.5,
+        "damage_mult": 0.85,
+        "max_pierce": 3,
+    },
 }

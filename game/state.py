@@ -1,6 +1,6 @@
 """游戏状态管理"""
 from settings import (
-    FIRE_INTERVAL, PLAYER_SPEED, PICKUP_RANGE,
+    FIRE_INTERVAL, PLAYER_SPEED, BULLET_BASE_DAMAGE, BULLET_COUNT_BASE,
     CRIT_MULTIPLIER, PLAYER_MAX_HP, REGEN_KILLS_INITIAL,
     ENEMY_HP, ENEMY_SPEED, ENEMY_SIZE, RED
 )
@@ -16,15 +16,16 @@ class GameState:
         """重置所有游戏状态"""
         self.stats = {
             "fire_interval": FIRE_INTERVAL,
-            "bullet_damage": 2,
+            "bullet_damage": BULLET_BASE_DAMAGE,
             "player_speed": PLAYER_SPEED,
-            "bullet_count": 1,
-            "pickup_range": PICKUP_RANGE,
+            "bullet_count": BULLET_COUNT_BASE,
             "damage_taken": 1.0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
             "greedy_count": 0,       # 贪婪之魂计数（经验×(1+0.15n)）
             "bullet_speed": 1.0,    # 子弹速度倍率
+            "bullet_pierce": 0,     # 穿透弹：额外穿透目标数（R3 B1）
+            "bullet_damage_mult": 1.0,  # 穿透弹伤害倍率（首取×0.85）
             "bullet_speed_damage_mult": 1.0,  # 保留字段：旧存档兼容，不再由急速子弹提升
             "regen_kills": 0,        # 复苏之风需要击杀数（0表示未获得）
             "regen_kills_progress": 0,
@@ -39,9 +40,11 @@ class GameState:
             "lightning_chains": 0,  # 闪电弹跳次数
             "lightning_damage": 0,  # 闪电伤害
             "has_traps": 0,
-            "trap_interval": 2.0,  # 陷阱释放间隔
+            "trap_interval": 2.0,  # 陷阱释放间隔（状态初始值，与 skills base_interval 同步）
             "trap_damage": 4,  # 陷阱伤害/秒
             "trap_radius_mult": 1.0,  # 陷阱范围倍率
+            "static_overload": 0,  # 静电过载层数（R3 C1）
+            "death_echo": 0,  # 死亡回响层数（R3 C2）
         }
         self.acquired_skills = []
         self.spawn_timer = 0.0
@@ -92,15 +95,16 @@ class GameState:
         """获取默认属性字典"""
         return {
             "fire_interval": FIRE_INTERVAL,
-            "bullet_damage": 2,
+            "bullet_damage": BULLET_BASE_DAMAGE,
             "player_speed": PLAYER_SPEED,
-            "bullet_count": 1,
-            "pickup_range": PICKUP_RANGE,
+            "bullet_count": BULLET_COUNT_BASE,
             "damage_taken": 1.0,
             "crit_chance": 0.0,
             "crit_multiplier": CRIT_MULTIPLIER,
             "greedy_count": 0,
             "bullet_speed": 1.0,
+            "bullet_pierce": 0,
+            "bullet_damage_mult": 1.0,
             "bullet_speed_damage_mult": 1.0,
             "regen_kills": 0,
             "regen_kills_progress": 0,
@@ -118,4 +122,6 @@ class GameState:
             "trap_interval": 2.0,
             "trap_damage": 4,
             "trap_radius_mult": 1.0,
+            "static_overload": 0,
+            "death_echo": 0,
         }

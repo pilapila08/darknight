@@ -4,7 +4,7 @@ from settings import BULLET_RADIUS, BULLET_SPEED, BLUE
 
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y, target_pos, speed_mult=1.0):
+    def __init__(self, x, y, target_pos, speed_mult=1.0, pierce=0, damage_mult=1.0):
         super().__init__()
         dx = target_pos[0] - x
         dy = target_pos[1] - y
@@ -20,6 +20,11 @@ class Bullet(pygame.sprite.Sprite):
             self.vy = 0
             dir_x = 1
             dir_y = 0
+
+        # R3 技能平衡：穿透剩余次数 + 每发伤害倍率（弹量边际惩罚 / 穿透弹 ×0.85）
+        self.pierce = pierce
+        self.damage_mult = damage_mult
+        self._hit_ids = set()  # 已命中敌人 id（穿透多段不重复命中同一目标）
 
         size = BULLET_RADIUS * 4 + 10
         center = size // 2

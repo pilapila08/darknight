@@ -15,6 +15,8 @@ RARITY_BY_KEY = {
     "damage_taken": "rare",
     # 紫色 - 武器
     "has_blades": "epic", "has_lightning": "epic", "has_traps": "epic",
+    # 史诗 - 联动技能（R3 §4.4）
+    "static_overload": "epic", "death_echo": "epic",
 }
 
 RARITY_STYLE = {

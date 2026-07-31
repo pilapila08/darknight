@@ -1,8 +1,8 @@
 import math
 import random
 import pygame
-from settings import (LIGHTNING_COOLDOWN, LIGHTNING_DAMAGE, LIGHTNING_CHAINS,
-                      LIGHTNING_CHAIN_RANGE, LIGHTNING_DECAY, LIGHTNING_COLOR, CYAN)
+from settings import (LIGHTNING_COOLDOWN, LIGHTNING_CHAIN_RANGE,
+                      LIGHTNING_DECAY, LIGHTNING_COLOR, CYAN)
 
 
 class LightningBolt:
@@ -69,10 +69,10 @@ class ChainLightning:
                     best = e
 
             if best:
-                # 使用stats中的闪电弹跳次数和伤害
-                chain_count = stats.get("lightning_chains", LIGHTNING_CHAINS)
+                # 使用stats中的闪电弹跳次数和伤害（兜底值 = 权威表 5跳/7伤，见 SKILL_DEFS）
+                chain_count = stats.get("lightning_chains", 5)
                 chain_count = max(1, chain_count)
-                damage = stats.get("lightning_damage", LIGHTNING_DAMAGE)
+                damage = stats.get("lightning_damage", 7)
                 hit_ids = set()
                 current = best
                 prev_pos = (player_rect.centerx, player_rect.centery)

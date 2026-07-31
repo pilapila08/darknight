@@ -18,7 +18,8 @@ from settings import (
     VOID_LORD_HP, VOID_LORD_DAMAGE, VOID_LORD_SIZE, VOID_LORD_COLOR,
     VOID_LORD_SPEED, VOID_LORD_ATTACK_INTERVAL, VOID_LORD_VOID_RIFT_DAMAGE,
     VOID_LORD_VOID_RIFT_RADIUS, VOID_LORD_VOID_RIFT_DURATION,
-    VOID_LORD_GRAVITY_STRENGTH, VOID_LORD_BARRAGE_COUNT, VOID_LORD_BARRAGE_DAMAGE,
+    VOID_LORD_GRAVITY_STRENGTH, VOID_LORD_GRAVITY_RADIUS,
+    VOID_LORD_BARRAGE_COUNT, VOID_LORD_BARRAGE_DAMAGE,
     VOID_LORD_ENRAGE_THRESHOLD, VOID_LORD_VOIDLING_HP, VOID_LORD_VOIDLING_DAMAGE,
     BOSS_1_TIME, BOSS_2_TIME, BOSS_3_TIME, BOSS_4_TIME,
     ENEMY_BULLET_SPEED,
@@ -129,6 +130,48 @@ class AreaEffect:
         pygame.draw.circle(surf, (*self.color[:3], min(255, alpha + 40)),
                            (self.radius, self.radius), self.radius, 2)
         world_rect = pygame.Rect(self.x - self.radius, self.y - self.radius, 0, 0)
+        screen_pos = camera.apply(world_rect)
+        screen.blit(surf, (screen_pos.x, screen_pos.y))
+
+
+class GravityWell(AreaEffect):
+    """虚空之主引力裂隙：核心持续伤害 + 大范围引力场把玩家拉向裂隙中心。
+
+    - 伤害圈：核心半径（VOID_LORD_VOID_RIFT_RADIUS），每 tick 一次伤害。
+    - 引力场：pull_radius 内玩家被施加向裂隙中心的位移，速度 = strength
+      （越靠近核心越强，最大=strength px/s）；位移按 dt 缩放，帧率无关。
+    """
+
+    def __init__(self, x, y, radius, duration, damage, strength, color,
+                 pull_radius=None, tick_interval=0.5):
+        super().__init__(x, y, radius, duration, damage, color, tick_interval)
+        self.strength = strength
+        self.pull_radius = pull_radius if pull_radius is not None else radius
+
+    def pull_vector(self, px, py, dt):
+        """返回把点 (px,py) 拉向裂隙中心的位移 (dx, dy)。"""
+        dx = self.x - px
+        dy = self.y - py
+        dist = math.hypot(dx, dy)
+        if dist <= 0 or dist >= self.pull_radius:
+            return (0.0, 0.0)
+        # 越靠近核心引力越强：边缘=25%强度，核心=100%强度
+        falloff = 1.0 - dist / self.pull_radius
+        pull = self.strength * (0.25 + 0.75 * falloff)
+        return (dx / dist * pull * dt, dy / dist * pull * dt)
+
+    def draw(self, screen, camera):
+        super().draw(screen, camera)
+        # 引力场外圈（牵引范围，淡紫色细环）
+        alpha = int(70 * max(0, 1 - self.elapsed / self.duration))
+        size = int(self.pull_radius * 2)
+        surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (*self.color[:3], alpha), (self.pull_radius, self.pull_radius),
+                           int(self.pull_radius), 2)
+        pygame.draw.circle(surf, (*self.color[:3], max(30, alpha // 2)),
+                           (self.pull_radius, self.pull_radius),
+                           int(self.pull_radius * 0.62), 1)
+        world_rect = pygame.Rect(self.x - self.pull_radius, self.y - self.pull_radius, 0, 0)
         screen_pos = camera.apply(world_rect)
         screen.blit(surf, (screen_pos.x, screen_pos.y))
 
@@ -413,10 +456,21 @@ class VoidLord(Boss):
                                     "damage": VOID_LORD_VOID_RIFT_DAMAGE,
                                     "color": (180, 0, 200)})
             elif r < 0.7:
+                # 虚空裂隙引力场：多个引力异常点（围绕玩家生成），吸引并伤害玩家
                 self.gravity_active = True
-                self.gravity_timer = 3.0
-                attacks.append({"type": "gravity", "x": self.rect.centerx, "y": self.rect.centery,
-                                "radius": 300, "strength": VOID_LORD_GRAVITY_STRENGTH, "duration": 3.0})
+                self.gravity_timer = VOID_LORD_VOID_RIFT_DURATION
+                for _ in range(3):
+                    gx = player_rect.centerx + random.randint(-200, 200)
+                    gy = player_rect.centery + random.randint(-200, 200)
+                    gx = max(50, min(MAP_WIDTH - 50, gx))
+                    gy = max(50, min(MAP_HEIGHT - 50, gy))
+                    attacks.append({"type": "gravity", "x": gx, "y": gy,
+                                    "radius": VOID_LORD_VOID_RIFT_RADIUS,
+                                    "pull_radius": VOID_LORD_GRAVITY_RADIUS,
+                                    "strength": VOID_LORD_GRAVITY_STRENGTH,
+                                    "duration": VOID_LORD_VOID_RIFT_DURATION,
+                                    "damage": VOID_LORD_VOID_RIFT_DAMAGE,
+                                    "color": (180, 0, 200)})
             else:
                 for i in range(VOID_LORD_BARRAGE_COUNT):
                     angle = (math.pi * 2 / VOID_LORD_BARRAGE_COUNT) * i
@@ -433,7 +487,12 @@ class VoidLord(Boss):
         if self.gravity_active:
             pos = camera.apply(self.rect)
             cx, cy = pos.centerx, pos.centery
-            pygame.draw.circle(screen, (180, 0, 200, 60), (cx, cy), 50, 3)
+            # 引力充能指示：紫色光环随时间扩散（实际裂隙在玩家周围生成）
+            t = pygame.time.get_ticks() / 1000.0
+            pulse = 0.5 + 0.5 * math.sin(t * 6.0)
+            r = int(VOID_LORD_VOID_RIFT_RADIUS * (1.2 + 0.8 * pulse))
+            pygame.draw.circle(screen, (180, 0, 200), (cx, cy), r, 3)
+            pygame.draw.circle(screen, (110, 0, 150), (cx, cy), max(4, r - 8), 1)
 
 
 BOSS_CLASSES = [CorpseKing, ShadowMage, IronColossus, VoidLord]

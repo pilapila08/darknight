@@ -1,11 +1,11 @@
 import math
 import pygame
 from settings import (TRAP_DURATION, TRAP_RADIUS, TRAP_DOT_DURATION,
-                      TRAP_DOT_TICK, TRAP_COLOR, TRAP_INTERVAL)
+                      TRAP_DOT_TICK, TRAP_COLOR, TRAP_DAMAGE_BASE)
 
 
 class AcidTrap(pygame.sprite.Sprite):
-    def __init__(self, x, y, trap_damage=4, radius_mult=1.0):
+    def __init__(self, x, y, trap_damage=TRAP_DAMAGE_BASE, radius_mult=1.0):
         super().__init__()
         self.trap_damage = trap_damage
         self.radius = int(TRAP_RADIUS * radius_mult)
@@ -48,9 +48,10 @@ class TrapManager:
         self.timer = 0.0
         self.group = pygame.sprite.Group()
 
-    def update(self, dt, player, interval=None, trap_damage=4, radius_mult=1.0):
+    def update(self, dt, player, interval=None, trap_damage=TRAP_DAMAGE_BASE, radius_mult=1.0):
         if interval is None:
-            interval = TRAP_INTERVAL
+            # interval 唯一源 = skills base_interval（R3 C7b 归一）；此处兜底仅防调用缺参
+            interval = 2.0
         self.timer += dt
         while self.timer >= interval:
             self.timer -= interval

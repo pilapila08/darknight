@@ -8,20 +8,30 @@ from settings import (
     SPAWN_INTERVAL, ENEMY_SIZE, ENEMY_HP, ENEMY_SPEED, MAX_ENEMIES,
     ELITE_SIZE, ELITE_SPEED, ELITE_HP,
     ELITE_CHANCE, ELITE_ACTIVATION, ELITE_HP_MULT, ELITE_DAMAGE_MULT,
+    ELITE_CHANCE_RAMP_PER_BOSS, ELITE_CHANCE_RAMP_PER_MIN, ELITE_CHANCE_MAX,
     CHARGER_HP, RANGER_HP, EXPLODER_HP,
     DIFFICULTY_INTERVAL, DIFFICULTY_MAX_TIER, HP_BONUS_PER_TIER, DAMAGE_BONUS_PER_TIER,
-    GROWTH_INTERVAL, SPAWN_RATE_CAP,
+    DAMAGE_BONUS_MAX, GROWTH_INTERVAL,
+    SPAWN_RATE_CAP_BASE, SPAWN_CAP_PER_BOSS,
+    BOSS_FIGHT_SPAWN_SLOWDOWN, BOSS_REINFORCE_DELAY, BOSS_REINFORCE_INTERVAL,
+    BOSS_REINFORCE_BASIC_COUNT, BOSS_REINFORCE_CHARGER_COUNT,
+    FINAL_SURGE_INTERVAL_MULT, FINAL_SURGE_ELITE_BONUS,
+    FINAL_SURGE_WAVE_INTERVAL, FINAL_SURGE_WAVE_COUNT,
+    BULLET_PENALTY_THRESHOLD, BULLET_PENALTY_MULT,
+    STATIC_OVERLOAD_CD_REDUCTION, DEATH_ECHO_RADIUS, DEATH_ECHO_DAMAGE,
     MAP_WIDTH, MAP_HEIGHT, XP_BASE, XP_GROWTH,
     PLAYER_MAX_HP, PLAYER_INVINCIBLE_TIME,
     BOSS_WARNING_DURATION, MAP_TRANSITION_DURATION,
     SHADOW_MAGE_SHADOW_HP, SHADOW_MAGE_SHADOW_DAMAGE,
     VOID_LORD_VOIDLING_HP, VOID_LORD_VOIDLING_DAMAGE,
+    VOID_LORD_VOID_RIFT_DAMAGE, VOID_LORD_VOID_RIFT_RADIUS,
+    VOID_LORD_VOID_RIFT_DURATION, VOID_LORD_GRAVITY_STRENGTH, VOID_LORD_GRAVITY_RADIUS,
     GAME_DURATION_SECONDS,
 )
 from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
 from entities import Particle, DamageNumber, Explosion, TrapManager
 from entities import HealthPack, ShieldPickup
-from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
+from entities.boss import Boss, BossProjectile, AreaEffect, GravityWell, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
 from effects.juice import EffectManager
 from systems import Camera, AudioManager, load_high_score, save_high_score
@@ -71,7 +81,6 @@ class NormalGame:
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.enemy_bullets = pygame.sprite.Group()
-        self.orbs = pygame.sprite.Group()
         self.drops = pygame.sprite.Group()
         self.particles = pygame.sprite.Group()
         self.damage_numbers = []
@@ -88,6 +97,10 @@ class NormalGame:
         self.lighting = LightingSystem()
         self.warning_flash_alpha = 0
         self.warning_flash_dir = 1
+        # R4 节奏计时器
+        self._boss_fight_timer = 0.0     # Boss 战已进行时长（用于 45s 增援波）
+        self._last_reinforce_time = 0.0  # 上次增援波时间戳
+        self._surge_timer = 0.0          # 终局冲锋包围波计时
 
     def _create_game_state(self):
         """创建游戏状态"""
@@ -222,10 +235,10 @@ class NormalGame:
         return pygame.Rect(10, 10, 80, 24)
 
     def _get_current_enemy_stats(self):
-        """获取当前游戏时间下各敌人的数值（线性+上限）"""
+        """获取当前游戏时间下各敌人的数值（线性+上限；R4：伤害封顶 DAMAGE_BONUS_MAX）"""
         tier = min(int(self.game_state.elapsed_time / GROWTH_INTERVAL), DIFFICULTY_MAX_TIER)
         hp_bonus = tier * HP_BONUS_PER_TIER
-        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
+        damage_bonus = min(tier * DAMAGE_BONUS_PER_TIER, DAMAGE_BONUS_MAX)
 
         return {
             "basic": {
@@ -316,8 +329,17 @@ class NormalGame:
             self.game_state.invincible_timer -= dt
 
         self.game_state.difficulty_level = int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL)
-        time_factor = min(self.game_state.elapsed_time / 30, SPAWN_RATE_CAP)
+        # R4 §2.3：tf_cap = 5 + 1.5×boss击杀（Boss 击杀=强度里程碑，修复 150s 刷怪封顶平台期）
+        tf_cap = SPAWN_RATE_CAP_BASE + SPAWN_CAP_PER_BOSS * self.game_state.boss_defeated_count
+        time_factor = min(self.game_state.elapsed_time / 30, tf_cap)
         current_spawn_interval = SPAWN_INTERVAL / (1 + time_factor * 0.3 + (time_factor * 0.15) ** 2)
+        # R4 §2.4：Boss 战期间普通刷怪减速（间隔 ×1.5，速率 ×0.67）
+        if self.game_state.boss_active:
+            current_spawn_interval *= BOSS_FIGHT_SPAWN_SLOWDOWN
+        # R4 §2.5：终局冲锋——最后 60s 刷怪加速
+        final_surge = self.game_state.elapsed_time >= GAME_DURATION_SECONDS - 60
+        if final_surge:
+            current_spawn_interval *= FINAL_SURGE_INTERVAL_MULT
 
         keys = pygame.key.get_pressed()
         self.player.update(dt, keys)
@@ -355,6 +377,25 @@ class NormalGame:
 
         # Boss更新
         self._update_bosses(dt)
+
+        # R4 §2.4：Boss 战防卡关增援波（超 45s 后每 15s 一波：4基础+1冲锋，环形入场）
+        if self.game_state.boss_active:
+            self._boss_fight_timer += dt
+            if (self._boss_fight_timer >= BOSS_REINFORCE_DELAY
+                    and self._boss_fight_timer - self._last_reinforce_time >= BOSS_REINFORCE_INTERVAL):
+                self._last_reinforce_time = self._boss_fight_timer
+                self._spawn_reinforcement_wave()
+        else:
+            self._boss_fight_timer = 0.0
+            self._last_reinforce_time = 0.0
+
+        # R4 §2.5：终局冲锋包围波（每 20s 一波 8 只环形入场，防龟缩角落）
+        if final_surge:
+            self._surge_timer += dt
+            if self._surge_timer >= FINAL_SURGE_WAVE_INTERVAL:
+                self._surge_timer = 0.0
+                for i in range(FINAL_SURGE_WAVE_COUNT):
+                    self._spawn_enemy(pos=self._ring_pos(i, FINAL_SURGE_WAVE_COUNT))
 
         # 武器系统
         self._update_weapons(dt)
@@ -399,7 +440,7 @@ class NormalGame:
         tier = tier_override if tier_override is not None else min(
             int(self.game_state.elapsed_time / DIFFICULTY_INTERVAL), DIFFICULTY_MAX_TIER)
         hp_bonus = tier * HP_BONUS_PER_TIER
-        damage_bonus = tier * DAMAGE_BONUS_PER_TIER
+        damage_bonus = min(tier * DAMAGE_BONUS_PER_TIER, DAMAGE_BONUS_MAX)
 
         if enemy_type_override:
             enemy_type = enemy_type_override
@@ -432,7 +473,17 @@ class NormalGame:
                              sprite_name=None, contact_damage=VOID_LORD_VOIDLING_DAMAGE)
             return voidling
 
-        if self.game_state.elapsed_time >= ELITE_ACTIVATION and random.random() < ELITE_CHANCE:
+        # R4 §2.3 精英概率斜坡：min(0.22 + 0.05×b + 0.01×⌊t/60⌋, 0.45)；终局 +0.10
+        elite_chance = min(
+            ELITE_CHANCE + ELITE_CHANCE_RAMP_PER_BOSS * self.game_state.boss_defeated_count
+            + ELITE_CHANCE_RAMP_PER_MIN * (self.game_state.elapsed_time // 60),
+            ELITE_CHANCE_MAX)
+        if self.game_state.elapsed_time >= GAME_DURATION_SECONDS - 60:
+            elite_chance += FINAL_SURGE_ELITE_BONUS
+        # R4 §2.4：Boss 战期间不刷精英（精英+召唤物双重压力过载）
+        if (not self.game_state.boss_active
+                and self.game_state.elapsed_time >= ELITE_ACTIVATION
+                and random.random() < elite_chance):
             elite_hp = int((ELITE_HP + hp_bonus) * ELITE_HP_MULT)
             return Enemy(x, y, hp=elite_hp, speed=ELITE_SPEED,
                          size=ELITE_SIZE, color=BLUE, is_elite=True,
@@ -452,6 +503,22 @@ class NormalGame:
             return (left - ENEMY_SIZE, random.randint(top, top + SCREEN_HEIGHT))
         else:
             return (left + SCREEN_WIDTH, random.randint(top, top + SCREEN_HEIGHT))
+
+    def _ring_pos(self, index, total, dist=420):
+        """环形入场位置：以玩家为中心，均匀分布在 dist px 圆环上。"""
+        angle = (2 * math.pi / total) * index
+        x = self.player.rect.centerx + int(math.cos(angle) * dist)
+        y = self.player.rect.centery + int(math.sin(angle) * dist)
+        return (max(50, min(MAP_WIDTH - 50, x)), max(50, min(MAP_HEIGHT - 50, y)))
+
+    def _spawn_reinforcement_wave(self):
+        """Boss 战增援波：4 基础 + 1 冲锋，环形入场（R4 §2.4）。"""
+        total = BOSS_REINFORCE_BASIC_COUNT + BOSS_REINFORCE_CHARGER_COUNT
+        for i in range(BOSS_REINFORCE_BASIC_COUNT):
+            self._spawn_enemy(enemy_type_override="basic", pos=self._ring_pos(i, total))
+        for i in range(BOSS_REINFORCE_CHARGER_COUNT):
+            self._spawn_enemy(enemy_type_override="charger",
+                              pos=self._ring_pos(BOSS_REINFORCE_BASIC_COUNT + i, total))
 
     def _nearest_enemy(self):
         """获取最近的敌人"""
@@ -474,6 +541,8 @@ class NormalGame:
             if target:
                 bullet_count = self.game_state.stats["bullet_count"]
                 bullet_speed_mult = self.game_state.stats.get("bullet_speed", 1.0)
+                pierce = self.game_state.stats.get("bullet_pierce", 0)
+                pierce_dmg_mult = self.game_state.stats.get("bullet_damage_mult", 1.0)
                 dx = target.rect.centerx - self.player.rect.centerx
                 dy = target.rect.centery - self.player.rect.centery
                 base_angle = math.atan2(dy, dx)
@@ -490,7 +559,11 @@ class NormalGame:
                     angle = base_angle + offset
                     tx = self.player.rect.centerx + math.cos(angle) * 100
                     ty = self.player.rect.centery + math.sin(angle) * 100
-                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty), bullet_speed_mult))
+                    # R3 §4.2：第 4 发起（含）每发伤害 ×0.55（边际惩罚）
+                    per_bullet = BULLET_PENALTY_MULT if i >= BULLET_PENALTY_THRESHOLD else 1.0
+                    self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery,
+                                            (tx, ty), bullet_speed_mult,
+                                            pierce=pierce, damage_mult=pierce_dmg_mult * per_bullet))
                 # 枪口火光
                 mx = self.player.rect.centerx + math.cos(base_angle) * 24
                 my = self.player.rect.centery + math.sin(base_angle) * 24
@@ -515,6 +588,10 @@ class NormalGame:
                 self.damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), self.dmg_font))
                 if dead:
                     self._kill_enemy(enemy)
+            # R3 §4.4 C1 静电过载：闪电每次命中使暗影新星当前 CD -0.15s
+            if self.game_state.stats.get("static_overload", 0) > 0 and lightning_hits:
+                reduction = STATIC_OVERLOAD_CD_REDUCTION * len(lightning_hits)
+                self.blade_mgr.cooldown_timer = max(0.0, self.blade_mgr.cooldown_timer - reduction)
 
     def _update_traps(self, dt):
         """更新陷阱"""
@@ -550,23 +627,34 @@ class NormalGame:
             if not (0 <= eb.rect.centerx <= MAP_WIDTH and 0 <= eb.rect.centery <= MAP_HEIGHT):
                 eb.kill()
 
+    def _apply_bullet_hit(self, bullet, enemy):
+        """对单个敌人结算一次子弹命中；支持穿透（同一目标不重复命中）。"""
+        if id(enemy) in bullet._hit_ids:
+            return
+        bullet._hit_ids.add(id(enemy))
+        self._damage_enemy(bullet, enemy)
+        if bullet.pierce > 0:
+            bullet.pierce -= 1
+        else:
+            bullet.kill()
+
     def _check_collisions(self):
         """碰撞检测"""
-        # 子弹碰撞敌人
+        # 子弹碰撞敌人（R3 B1：穿透弹可命中多个目标）
         hits = pygame.sprite.groupcollide(self.bullets, self.enemies, False, False)
         for bullet, hit_enemies in hits.items():
-            bullet.kill()
             for enemy in hit_enemies:
-                self._damage_enemy(bullet, enemy)
-                break
+                self._apply_bullet_hit(bullet, enemy)
+                if not bullet.alive():
+                    break
 
         # 子弹碰撞Boss
         for bullet in list(self.bullets):
             for boss in self.bosses:
                 if bullet.rect.colliderect(boss.rect):
-                    self._damage_enemy(bullet, boss)
-                    bullet.kill()
-                    break
+                    self._apply_bullet_hit(bullet, boss)
+                    if not bullet.alive():
+                        break
 
         # Boss弹幕碰撞玩家
         if self.game_state.invincible_timer <= 0:
@@ -613,6 +701,8 @@ class NormalGame:
     def _damage_enemy(self, bullet, enemy):
         """伤害敌人"""
         dmg = self.game_state.stats["bullet_damage"]
+        # R3：每发子弹伤害倍率（弹量边际惩罚 ×0.55 / 穿透弹 ×0.85）
+        dmg *= getattr(bullet, "damage_mult", 1.0)
         # 急速子弹速度达上限后的伤害加成（独立于火力增强）
         dmg *= self.game_state.stats.get("bullet_speed_damage_mult", 1.0)
         is_crit = random.random() < self.game_state.stats["crit_chance"]
@@ -688,7 +778,25 @@ class NormalGame:
         self.game_state.score += 1
         self.game_state.experience += xp_gained
         self._maybe_drop_item(enemy)
+        # R3 §4.4 C2 死亡回响：击杀精英时引爆周围敌人
+        if enemy.is_elite:
+            self._trigger_death_echo(enemy.rect.centerx, enemy.rect.centery)
         enemy.kill()
+
+    def _trigger_death_echo(self, x, y):
+        """死亡回响：击杀精英/Boss 时，对 200px 内敌人造成 12 伤并击退。"""
+        if self.game_state.stats.get("death_echo", 0) <= 0:
+            return
+        for enemy in list(self.enemies):
+            if isinstance(enemy, Boss):
+                continue
+            dist = math.hypot(enemy.rect.centerx - x, enemy.rect.centery - y)
+            if dist <= DEATH_ECHO_RADIUS and dist > 0:
+                enemy.rect.x += int((enemy.rect.centerx - x) / dist * 40)
+                enemy.rect.y += int((enemy.rect.centery - y) / dist * 40)
+                dead = enemy.take_damage(DEATH_ECHO_DAMAGE)
+                if dead:
+                    self._kill_enemy(enemy)
 
     def _maybe_drop_item(self, enemy):
         hp_ratio = self.game_state.player_hp / max(1, self.game_state.stats["max_hp"])
@@ -832,8 +940,6 @@ class NormalGame:
             self.screen.blit(eb.image, self.camera.apply(eb.rect))
         for bp in self.boss_projectiles:
             self.screen.blit(bp.image, self.camera.apply(bp.rect))
-        for orb in self.orbs:
-            self.screen.blit(orb.image, self.camera.apply(orb.rect))
         for particle in self.particles:
             self.screen.blit(particle.image, self.camera.apply(particle.rect))
 
@@ -933,8 +1039,6 @@ class NormalGame:
             L.add_light(eb.rect.centerx, eb.rect.centery, 46, (255, 130, 100), 0.8)
         for bp in self.boss_projectiles:
             L.add_light(bp.rect.centerx, bp.rect.centery, 70, (255, 120, 120), 0.9)
-        for orb in self.orbs:
-            L.add_light(orb.rect.centerx, orb.rect.centery, 38, (255, 220, 120), 0.55)
         for drop in self.drops:
             color = (120, 255, 150) if drop.kind == "health" else (110, 200, 255)
             L.add_light(drop.rect.centerx, drop.rect.centery, 52, color, 0.7)
@@ -980,9 +1084,10 @@ class NormalGame:
 
         if self.game_state.boss_warning_timer <= BOSS_WARNING_DURATION - 1.5 and not self._boss_clear_done:
             self._boss_clear_done = True
+            # R4 §2.4：Boss 战前清场改为无奖励清除（不触发经验/掉落/复苏之风）
             for enemy in list(self.enemies):
                 if not isinstance(enemy, Boss):
-                    self._kill_enemy(enemy)
+                    enemy.kill()
 
         if self.game_state.boss_warning_timer <= 0:
             self.game_state.boss_warning_active = False
@@ -1046,7 +1151,15 @@ class NormalGame:
                                         (200, 200, 100), radius=8, lifetime=0.8)
                     self.boss_projectiles.add(bp)
             elif atk_type == "gravity":
-                pass
+                # 虚空裂隙引力场：核心持续伤害 + 引力牵引（玩家被拉向裂隙中心）
+                well = GravityWell(atk["x"], atk["y"],
+                                   atk.get("radius", VOID_LORD_VOID_RIFT_RADIUS),
+                                   atk.get("duration", VOID_LORD_VOID_RIFT_DURATION),
+                                   atk.get("damage", VOID_LORD_VOID_RIFT_DAMAGE),
+                                   atk.get("strength", VOID_LORD_GRAVITY_STRENGTH),
+                                   atk.get("color", (180, 0, 200)),
+                                   pull_radius=atk.get("pull_radius", VOID_LORD_GRAVITY_RADIUS))
+                self.area_effects.append(well)
 
     def _kill_boss(self, boss):
         for _ in range(30):
@@ -1062,6 +1175,8 @@ class NormalGame:
         greedy_mult = 1.0 + 0.15 * greedy_count
         self.game_state.experience += int(20 * greedy_mult)
         self.game_state.score += 50
+        # R3 §4.4 C2 死亡回响：击杀 Boss 引爆周围敌人
+        self._trigger_death_echo(boss.rect.centerx, boss.rect.centery)
         boss.kill()
         self.bosses.remove(boss)
         self.game_state.boss_active = False
@@ -1082,6 +1197,13 @@ class NormalGame:
                 continue
             if ae.should_tick() and ae.contains_point(self.player.rect.centerx, self.player.rect.centery):
                 self._damage_player(ae.damage, 0, 0)
+            # 引力井：对玩家施加向裂隙中心的位移（帧率无关，已按 dt 缩放）
+            if isinstance(ae, GravityWell):
+                dx, dy = ae.pull_vector(self.player.rect.centerx, self.player.rect.centery, dt)
+                if dx or dy:
+                    self.player.rect.x += dx
+                    self.player.rect.y += dy
+                    self.player.rect.clamp_ip(pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT))
 
     def _render_boss_warning(self):
         config = getattr(self, '_pending_boss_config', None)
