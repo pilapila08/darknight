@@ -4,3 +4,5 @@ souls_save.json
 dist/
 build/
 *.spec
+.idea/
+.workbuddy/
