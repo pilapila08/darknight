@@ -197,3 +197,23 @@ VOID_LORD_VOIDLING_DAMAGE = 20
 
 # ---- Map System ----
 MAP_TRANSITION_DURATION = 2.0
+
+# ---- L1 程序动画（正弦 bob + 水平挤压 + 朝向 flip + 脚底阴影联动）----
+# 依据 design/art/animation-params-v1.md（美术方向）；bob 半波 (1-cos)/2：
+# phase=0 触地（dy=0，脚贴阴影），phase=π 最高点（dy=-amp，负=向上）。
+BOB_AMPLITUDE = 2.0   # 默认 bob 幅度（px，负=向上）
+BOB_FREQ = 2.2        # 默认 bob 频率（Hz）
+SQUASH_AMOUNT = 0.10  # 默认挤压系数（±10% 形变）
+BOB_PHASE_STEP = 0.7  # 同类实体相位错开步长（rad，≈2π/9 均匀分布）
+FLIP_DEADZONE = 5.0   # |vx| ≤ 5 px/s 视为静止，不翻转（防抖动）
+# 按实体类型差异：玩家轻快小振幅 / 敌人中等软弹 / Boss 低频大振幅（沉重感）
+WALK_ANIM_PER_TYPE = {
+    # amp: bob 幅度(px) · freq: bob 频率(Hz) · squash: 挤压系数 · shadow_fade: 阴影联动乘数
+    "player":   {"amp": 1.5, "freq": 3.0, "squash": 0.08, "shadow_fade": 0.30},
+    "enemy":    {"amp": 2.0, "freq": 2.2, "squash": 0.10, "shadow_fade": 0.30},
+    "exploder": {"amp": 2.5, "freq": 2.8, "squash": 0.12, "shadow_fade": 0.30},
+    "charger":  {"amp": 2.0, "freq": 1.8, "squash": 0.10, "shadow_fade": 0.30},
+    "ranger":   {"amp": 1.5, "freq": 1.6, "squash": 0.08, "shadow_fade": 0.30},
+    "elite":    {"amp": 2.5, "freq": 1.5, "squash": 0.07, "shadow_fade": 0.30},
+    "boss":     {"amp": 4.0, "freq": 0.9, "squash": 0.04, "shadow_fade": 0.30},
+}

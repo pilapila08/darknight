@@ -24,6 +24,8 @@ from settings import (
     ENEMY_BULLET_SPEED,
 )
 from .enemy import Enemy
+from entities.walk_anim import compute_walk_frame, resolve_params
+from ui.render_helpers import draw_shadowed_sprite_offset
 
 
 class BossProjectile(pygame.sprite.Sprite):
@@ -165,7 +167,14 @@ class Boss(Enemy):
         return attacks
 
     def draw(self, screen, camera):
-        screen.blit(self.image, camera.apply(self.rect))
+        # L1 程序动画：低频大振幅（沉重感）+ 脚底阴影联动
+        t = pygame.time.get_ticks() / 1000.0
+        params = resolve_params("boss")
+        frame = compute_walk_frame(self.image, t, id(self), self.vx, params)
+        draw_shadowed_sprite_offset(screen, camera, frame.surface, self.rect,
+                                    dy=frame.bob,
+                                    shadow_scale=1.35 * frame.shadow_scale,
+                                    shadow_alpha=125)
 
     def _do_attacks(self, dt, player_rect):
         return []

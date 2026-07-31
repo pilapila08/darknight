@@ -1,8 +1,10 @@
 import math
 import pygame
-from settings import ENEMY_SIZE, ENEMY_SPEED, ENEMY_HP, RED, WHITE
+from settings import ENEMY_SIZE, ENEMY_SPEED, ENEMY_HP, RED, WHITE, WALK_ANIM_PER_TYPE
 from entities.animation import Animation
+from entities.walk_anim import compute_walk_frame, resolve_params
 from effects.asset_loader import load_image
+from ui.render_helpers import draw_shadowed_sprite_offset
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -19,7 +21,11 @@ class Enemy(pygame.sprite.Sprite):
 
         self._base_color = color
         self._size = size
+        self._sprite_name = sprite_name  # 用于 L1 程序动画按类型取参
         self.flash_timer = 0.0
+
+        # L1 程序动画：水平速度（px/s，负=朝左），由 _move_toward 维护
+        self.vx = 0.0
 
         # DoT debuff
         self.dot_timer = 0.0
@@ -89,6 +95,7 @@ class Enemy(pygame.sprite.Sprite):
         if dist > 0:
             self.rect.x += (dx / dist) * self.speed * dt
             self.rect.y += (dy / dist) * self.speed * dt
+            self.vx = (dx / dist) * self.speed
 
     def update(self, dt, player_rect):
         self._update_flash(dt)
@@ -99,3 +106,14 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.image = self._normal_frames[self._anim.current]
         self._move_toward(player_rect.centerx, player_rect.centery, dt)
+
+    def draw(self, screen, camera):
+        """绘制：L1 程序动画（bob/squash/flip）+ 脚底阴影联动。"""
+        t = pygame.time.get_ticks() / 1000.0
+        anim_type = self._sprite_name if self._sprite_name in WALK_ANIM_PER_TYPE \
+            else ("elite" if self.is_elite else "enemy")
+        params = resolve_params(anim_type)
+        frame = compute_walk_frame(self.image, t, id(self), self.vx, params)
+        draw_shadowed_sprite_offset(screen, camera, frame.surface, self.rect,
+                                    dy=frame.bob, shadow_scale=frame.shadow_scale,
+                                    shadow_alpha=90)

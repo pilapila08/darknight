@@ -31,7 +31,7 @@ from skills import get_random_skills, apply_skill
 from ui import draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection, draw_pause_menu, get_font
 from ui.drawables import get_font as ui_get_font
 from ui.boss_hud import draw_boss_hp_bar
-from ui.render_helpers import draw_ground_shadow, draw_shadowed_sprite
+from ui.render_helpers import draw_shadowed_sprite
 from i18n import t
 
 
@@ -822,11 +822,10 @@ class NormalGame:
             if kind == "player":
                 entity.draw(self.screen, self.camera)
             elif kind == "boss":
-                draw_ground_shadow(self.screen, self.camera, entity.rect, scale=1.35, alpha=125)
                 entity.draw(self.screen, self.camera)
                 entity.draw_hp_bar_bg(self.screen, self.dmg_font, self.camera)
             else:
-                draw_shadowed_sprite(self.screen, self.camera, entity.image, entity.rect)
+                entity.draw(self.screen, self.camera)
         for bullet in self.bullets:
             self.screen.blit(bullet.image, self.camera.apply(bullet.rect))
         for eb in self.enemy_bullets:

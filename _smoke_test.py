@@ -167,6 +167,50 @@ def t_normal_game():
     g.audio.stop_music()
 
 
+# --- L1 程序动画 ---
+def t_walk_anim():
+    from entities.walk_anim import (
+        bob_offset, squash, flip_for_direction, apply_walk_anim,
+        compute_walk_frame, resolve_params, bob_phase,
+    )
+    from entities.enemy import Enemy
+    from entities.boss import CorpseKing
+    from entities import Player
+    from systems.camera import Camera
+    from ui.drawables import get_font
+    cam = Camera()
+
+    # 纯函数：bob 半波（phase=0 触地 dy=0；phase=π 最高点 dy=-amp，负=向上）
+    assert bob_offset(0.0, 0.0, 4.0, 1.0) == 0
+    assert bob_offset(0.5, 0.0, 4.0, 1.0) == -4
+
+    # squash：触地（cos=1）水平加宽/垂直压缩；最高点（cos=-1）反向
+    base = pygame.Surface((28, 28), pygame.SRCALPHA)
+    sq_ground = squash(base, 0.0, 0.0, 0.10, freq=1.0)
+    assert sq_ground.get_width() >= 28 and sq_ground.get_height() <= 28
+    sq_peak = squash(base, 0.5, 0.0, 0.10, freq=1.0)
+    assert sq_peak.get_width() <= 28 and sq_peak.get_height() >= 28
+
+    # flip：vx<-5 镜像，vx>=0 零拷贝
+    assert flip_for_direction(base, -100.0) is not base
+    assert flip_for_direction(base, 10.0) is base
+
+    # 相位错开：不同 id 相位不同
+    assert bob_phase(1) != bob_phase(2)
+
+    # 组合入口 + 绘制帧
+    p = resolve_params("player")
+    assert isinstance(apply_walk_anim(base, 0.25, 1, 100.0, p), pygame.Surface)
+    frame = compute_walk_frame(base, 0.25, 1, 100.0, p)
+    assert 0.0 <= frame.shadow_scale <= 2.0
+
+    # 实体接入：玩家 / 敌人 / Boss 均可用 L1 draw
+    Player().draw(screen, cam)
+    Enemy(100, 100).draw(screen, cam)
+    CorpseKing(200, 200).draw(screen, cam)
+    CorpseKing(200, 200).draw_hp_bar_bg(screen, get_font(16), cam)
+
+
 check("effects/juice", t_juice)
 check("systems/lighting", t_lighting)
 check("systems/camera", t_camera)
@@ -178,6 +222,7 @@ check("ui/boss_hud", t_boss_hud)
 check("ui/game_over", t_game_over)
 check("ui/start_screen", t_start_screen)
 check("game/normal_game 10帧模拟", t_normal_game)
+check("entities/walk_anim L1程序动画", t_walk_anim)
 
 print()
 if FAILED:
