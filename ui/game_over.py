@@ -2,6 +2,7 @@
 import math
 import pygame
 from settings import WHITE, RED, GOLD, GREEN
+from i18n import t
 
 # 结算动画状态：面板滑入 + 数字滚动
 _anim = {"key": None, "start_ms": 0}
@@ -36,7 +37,7 @@ def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, hi
     pygame.draw.rect(screen, border_color, (panel.x, panel.y, panel.width, 6),
                      border_top_left_radius=8, border_top_right_radius=8)
 
-    title_text = "胜利" if is_victory else "游戏结束"
+    title_text = t("game_over_victory") if is_victory else t("game_over_defeat")
     title_color = GREEN if is_victory else RED
     title = big_font.render(title_text, True, title_color)
     screen.blit(title, title.get_rect(center=(sw // 2, panel.y + 58)))
@@ -44,10 +45,10 @@ def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, hi
     minutes = int(elapsed_time // 60)
     seconds = int(elapsed_time % 60)
     lines = [
-        ("存活时间", f"{minutes:02d}:{seconds:02d}", None),
-        ("击杀敌人", str(score), score),
-        ("达到等级", f"Lv.{level}", level),
-        ("最高分", str(high_score), high_score),
+        (t("game_over_time"), f"{minutes:02d}:{seconds:02d}", None),
+        (t("game_over_kills"), str(score), score),
+        (t("game_over_level"), f"Lv.{level}", level),
+        (t("game_over_high_score"), str(high_score), high_score),
     ]
     y = panel.y + 112
     for i, (label, value, numeric) in enumerate(lines):
@@ -65,7 +66,7 @@ def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, hi
         if numeric is not None:
             roll_t = min(1.0, max(0.0, (elapsed - 0.3 - i * 0.15) / 0.5))
             shown = int(numeric * _ease_out_cubic(roll_t))
-            if label == "达到等级":
+            if label == t("game_over_level"):
                 value = f"Lv.{shown}"
             else:
                 value = str(shown)
@@ -82,7 +83,7 @@ def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, hi
         # 新纪录呼吸金光
         pulse = 0.6 + 0.4 * math.sin(now * 0.008)
         record_font = font
-        record_text = record_font.render("★ 新纪录 ★", True,
+        record_text = record_font.render(t("game_over_new_record"), True,
                                          (255, int(190 + 50 * pulse), int(60 * pulse)))
         screen.blit(record_text, record_text.get_rect(center=(sw // 2, y + 8)))
 
@@ -91,9 +92,9 @@ def draw_game_over_screen(screen, big_font, font, elapsed_time, score, level, hi
     hovered = btn_rect.collidepoint(pygame.mouse.get_pos())
     pygame.draw.rect(screen, (48, 54, 74) if hovered else (35, 40, 55), btn_rect, border_radius=8)
     pygame.draw.rect(screen, GOLD, btn_rect, 3 if hovered else 2, border_radius=8)
-    btn_text = font.render("重新开始", True, GOLD)
+    btn_text = font.render(t("game_over_restart"), True, GOLD)
     screen.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
-    hint = font.render("按 SPACE 或点击按钮", True, (130, 140, 160))
+    hint = font.render(t("game_over_hint"), True, (130, 140, 160))
     screen.blit(hint, hint.get_rect(center=(sw // 2, btn_rect.bottom + 22)))
     return btn_rect

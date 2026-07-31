@@ -3,6 +3,7 @@ import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, ENABLE_TEST_MODE
 from ui import draw_start_screen, handle_start_screen_input, get_font
 from game import NormalGame, TestGame
+from i18n import t
 
 
 
@@ -18,7 +19,7 @@ def main():
     pygame.init()
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("暗夜求生  |  F11 全屏")
+    pygame.display.set_caption(t("window_caption"))
     clock = pygame.time.Clock()
 
     font = get_font(24)

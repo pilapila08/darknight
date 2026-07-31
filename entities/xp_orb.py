@@ -1,3 +1,8 @@
+"""[废弃] XpOrb 经验球模块。
+
+v3.0 起经验改为击杀直给，本模块不再被任何代码引用（entities/__init__.py 已移除导出）。
+仅保留文件以便日后如需恢复拾取机制可参考；待 ORB_RADIUS/ORB_SPEED 等常量一并清理后删除。
+"""
 import math
 import pygame
 from settings import ORB_RADIUS, ORB_SPEED, PICKUP_RANGE, YELLOW

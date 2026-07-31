@@ -3,6 +3,7 @@ import math
 import random
 import pygame
 from settings import GOLD, ENABLE_TEST_MODE
+from i18n import t
 
 # 标题画面氛围粒子（缓慢上浮的暗紫色光点）
 _particles = []
@@ -63,11 +64,12 @@ def draw_start_screen(screen, big_font, font, small_font, test_activated=False):
     # 标题（带呼吸光晕和阴影）
     title_cx, title_cy = sw // 2, sh // 5
     pulse = 0.6 + 0.4 * math.sin(now * 0.0015)
-    title = big_font.render("暗 夜 求 生", True, GOLD)
-    glow = big_font.render("暗 夜 求 生", True, (120, 80, 30))
+    title_text = t("start_title")
+    title = big_font.render(title_text, True, GOLD)
+    glow = big_font.render(title_text, True, (120, 80, 30))
     glow.set_alpha(int(140 * pulse))
     title_rect = title.get_rect(center=(title_cx, title_cy))
-    shadow = big_font.render("暗 夜 求 生", True, (40, 20, 10))
+    shadow = big_font.render(title_text, True, (40, 20, 10))
     screen.blit(shadow, title_rect.move(4, 4))
     for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
         screen.blit(glow, title_rect.move(dx, dy))
@@ -79,29 +81,29 @@ def draw_start_screen(screen, big_font, font, small_font, test_activated=False):
                      (title_cx + line_w, title_cy + 38), 1)
 
     # 副标题
-    sub = font.render("Darknight Survival", True, (150, 130, 180))
+    sub = font.render(t("start_subtitle"), True, (150, 130, 180))
     sub_rect = sub.get_rect(center=(sw // 2, sh // 5 + 55))
     screen.blit(sub, sub_rect)
 
-    # 说明文字
+    # 说明文字：(文本, 是否标题行)
     lines = [
-        "WASD / 方向键  移动",
-        "自动瞄准最近敌人开火",
-        "击杀敌人掉落经验球  →  升级  →  选择强化",
-        "",
-        "武器系统：",
-        "  暗影新星 — 周期性释放范围冲击波",
-        "  连锁闪电 — 弹跳打击多个敌人",
-        "  剧毒地雷 — 自动释放毒圈",
-        "",
-        "敌人类型会随时间逐渐解锁",
+        (t("start_help_move"), False),
+        (t("start_help_auto_fire"), False),
+        (t("start_help_xp"), False),
+        ("", False),
+        (t("start_weapons_header"), True),
+        (t("start_weapon_nova"), False),
+        (t("start_weapon_lightning"), False),
+        (t("start_weapon_trap"), False),
+        ("", False),
+        (t("start_enemy_unlock"), True),
     ]
     y = sh // 3 + 30
-    for line in lines:
+    for line, is_header in lines:
         if line == "":
             y += 12
             continue
-        color = GOLD if line.startswith("武器") or line.startswith("敌人") else (200, 200, 210)
+        color = GOLD if is_header else (200, 200, 210)
         text = font.render(line, True, color)
         text_rect = text.get_rect(center=(sw // 2, y))
         screen.blit(text, text_rect)
@@ -121,13 +123,13 @@ def draw_start_screen(screen, big_font, font, small_font, test_activated=False):
     border_pulse = int(200 + 55 * math.sin(now * 0.004))
     pygame.draw.rect(screen, (border_pulse, int(border_pulse * 0.8), 0),
                      btn_rect, 3 if hovered else 2, border_radius=8)
-    start_text = font.render("开 始 游 戏", True, GOLD)
+    start_text = font.render(t("start_button"), True, GOLD)
     start_text_rect = start_text.get_rect(center=btn_rect.center)
     screen.blit(start_text, start_text_rect)
 
     # 开始游戏提示（呼吸闪烁）
     hint_alpha = int(120 + 100 * (0.5 + 0.5 * math.sin(now * 0.003)))
-    start_hint = font.render("按 空格键 开始游戏", True, (170, 170, 185))
+    start_hint = font.render(t("start_hint"), True, (170, 170, 185))
     start_hint.set_alpha(hint_alpha)
     start_hint_rect = start_hint.get_rect(center=(sw // 2, btn_y + btn_h + 30))
     screen.blit(start_hint, start_hint_rect)
@@ -143,7 +145,7 @@ def draw_start_screen(screen, big_font, font, small_font, test_activated=False):
         pygame.draw.rect(screen, (42, 42, 66) if test_hovered else (30, 30, 50),
                          test_btn_rect, border_radius=6)
         pygame.draw.rect(screen, (100, 100, 140), test_btn_rect, 1, border_radius=6)
-        test_text = small_font.render("测试模式 (T)", True, (150, 150, 200))
+        test_text = small_font.render(t("start_test_mode"), True, (150, 150, 200))
         test_text_rect = test_text.get_rect(center=test_btn_rect.center)
         screen.blit(test_text, test_text_rect)
 

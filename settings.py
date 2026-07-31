@@ -3,6 +3,9 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 
+# Game (Victory condition)
+GAME_DURATION_SECONDS = 600  # 存活满 10 分钟即为胜利（README 承诺）
+
 # Debug
 ENABLE_TEST_MODE = True  # 测试模式开关，True=开启，False=关闭
 

@@ -14,9 +14,10 @@ from settings import (
     BOSS_WARNING_DURATION, MAP_TRANSITION_DURATION,
     SHADOW_MAGE_SHADOW_HP, SHADOW_MAGE_SHADOW_DAMAGE,
     VOID_LORD_VOIDLING_HP, VOID_LORD_VOIDLING_DAMAGE,
+    GAME_DURATION_SECONDS,
 )
 from entities import Player, Enemy, Charger, Ranger, Exploder, Bullet, EnemyBullet
-from entities import XpOrb, Particle, DamageNumber, Explosion, TrapManager
+from entities import Particle, DamageNumber, Explosion, TrapManager
 from entities import HealthPack, ShieldPickup
 from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
@@ -33,6 +34,7 @@ from ui.boss_hud import draw_boss_hp_bar
 from ui.render_helpers import draw_ground_shadow, draw_shadowed_sprite
 from game.state import GameState
 from game.test_mode import TestModeHandler
+from i18n import t
 
 
 class TestGame:
@@ -45,7 +47,7 @@ class TestGame:
         pygame.event.set_blocked(pygame.TEXTEDITING)
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("暗夜求生 - 测试模式  |  F11 全屏")
+        pygame.display.set_caption(t("window_caption_test"))
         self.clock = pygame.time.Clock()
         self.audio = AudioManager()
         self.audio.start_music()
@@ -174,6 +176,10 @@ class TestGame:
 
             # 游戏结束
             if self.game_over:
+                # ESC 返回主菜单（优雅退出游戏循环，main 会重建开始界面）
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.running = False
+                    return
                 do_restart = False
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     do_restart = True
@@ -462,7 +468,6 @@ class TestGame:
         self._check_collisions()
 
         # 经验球
-        self._update_orbs()
         self._update_drops(dt)
 
         # 区域效果更新
@@ -822,13 +827,6 @@ class TestGame:
                     self._kill_enemy(enemy)
         self.explosions = [e for e in self.explosions if e.alive]
 
-    def _update_orbs(self):
-        """更新经验球"""
-        for orb in list(self.orbs):
-            orb.update(1/60, self.player.rect, self.game_state.stats["pickup_range"])
-            if orb.rect.colliderect(self.player.rect):
-                orb.kill()
-
     def _update_drops(self, dt):
         for drop in list(self.drops):
             drop.update(dt, self.player.rect)
@@ -877,15 +875,21 @@ class TestGame:
         from skills import get_random_skills as original_get_random_skills
         return original_get_random_skills(count, self.game_state.stats)
 
+    def _trigger_game_over(self, is_victory):
+        """统一进入结算：置 game_over 并保存最高分。"""
+        self.game_state.game_over = True
+        self.game_over = True
+        self.is_victory = is_victory
+        self.new_record = save_high_score(self.game_state.score)
+        if self.new_record:
+            self.high_score = self.game_state.score
+
     def _check_game_end(self):
-        """检查游戏结束（仅死亡）"""
+        """检查游戏结束：死亡，或存活满 GAME_DURATION_SECONDS 胜利。"""
         if self.game_state.player_hp <= 0:
-            self.game_state.game_over = True
-            self.game_over = True
-            self.new_record = save_high_score(self.game_state.score)
-            if self.new_record:
-                self.high_score = self.game_state.score
-            self.is_victory = False
+            self._trigger_game_over(False)
+        elif self.game_state.elapsed_time >= GAME_DURATION_SECONDS:
+            self._trigger_game_over(True)
 
     def _render(self):
         """渲染"""

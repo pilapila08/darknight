@@ -14,6 +14,13 @@ import pygame
 
 SAMPLE_RATE = 22050
 
+# 关键修复（P0）：让 pygame.mixer 的采样率与合成采样率一致。
+# mixer 默认 44100Hz，而合成缓冲是 22050Hz；若不一致，Sound(buffer=...) 会被按
+# 44100Hz 播放 → 全部程序合成音效/BGM 2 倍速（时长减半、高八度）。
+# pre_init 确保随后 pygame.init()/mixer.init() 使用正确采样率（覆盖 main.py 入口）；
+# AudioManager.__init__ 内另有兜底对齐（覆盖 _smoke_test.py 等先 init 的入口）。
+pygame.mixer.pre_init(SAMPLE_RATE, -16, 2)
+
 
 def _resource_path(relative_path):
     base = getattr(sys, "_MEIPASS", os.path.abspath("."))
@@ -279,6 +286,19 @@ def _generate_music_loop():
 
 class AudioManager:
     def __init__(self):
+        # 兜底对齐 mixer 采样率（见模块顶部 pre_init 注释）。
+        # 若 mixer 已被其它入口以默认 44100Hz 初始化，此处强制重启到 SAMPLE_RATE，
+        # 必须在任何 Sound 创建之前执行。
+        pygame.mixer.pre_init(SAMPLE_RATE, -16, 2)
+        current = pygame.mixer.get_init()
+        if not current or current[0] != SAMPLE_RATE:
+            try:
+                pygame.mixer.quit()
+                pygame.mixer.init(SAMPLE_RATE, -16, 2)
+            except pygame.error:
+                # 音频设备不可用时保持原行为（首个 Sound 创建会正常报错）
+                pass
+
         # SFX（外部文件优先，缺失时合成）
         self._shoot = _load_external("shoot") or _generate_shoot()
         self._shoot_variants = [self._shoot,

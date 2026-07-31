@@ -6,3 +6,6 @@ build/
 *.spec
 .idea/
 .workbuddy/
+
+# AI 生成设计参考（含水印，不入库）
+design/art/ai-samples/
