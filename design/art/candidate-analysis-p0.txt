@@ -1,0 +1,20 @@
+==================== p0-elite
+pixel_art_monster_concept__eli_2026-07-31T15-52-41 | size 1024x1024 | ncol 1118
+   corners [(71, 71, 69), (71, 70, 69), (70, 70, 68), (74, 73, 73)]
+   center (65, 45, 23) edge (69, 72, 70) body_ratio% 25.5
+pixel_art_monster_concept__eli_2026-07-31T15-53-27 | size 1024x1024 | ncol 1505
+   corners [(164, 163, 162), (197, 197, 198), (197, 197, 195), (163, 162, 159)]
+   center (53, 39, 29) edge (180, 181, 180) body_ratio% 25.5
+pixel_art_monster_concept__eli_2026-07-31T15-53-51 | size 1024x1024 | ncol 993
+   corners [(241, 244, 242), (240, 240, 242), (253, 253, 251), (237, 238, 235)]
+   center (54, 39, 24) edge (246, 247, 246) body_ratio% 32.8
+==================== p0-charger
+pixel_art_monster_concept__cha_2026-07-31T15-52-41 | size 1024x1024 | ncol 1072
+   corners [(154, 155, 153), (153, 153, 153), (152, 154, 151), (130, 133, 130)]
+   center (47, 41, 42) edge (140, 143, 141) body_ratio% 20.5
+pixel_art_monster_concept__cha_2026-07-31T15-54-16 | size 1024x1024 | ncol 1187
+   corners [(213, 216, 213), (215, 215, 216), (172, 171, 169), (213, 215, 211)]
+   center (48, 42, 45) edge (191, 192, 191) body_ratio% 56.7
+pixel_art_monster_concept__cha_2026-07-31T15-54-40 | size 1024x1024 | ncol 1886
+   corners [(251, 253, 251), (249, 250, 251), (133, 132, 132), (131, 129, 127)]
+   center (80, 49, 36) edge (190, 190, 190) body_ratio% 79.3
