@@ -89,6 +89,8 @@ class MapManager:
         self.anomalies = []
         self.scenery = []
         self._vignette = None
+        self._ground_chunk = None
+        self._ground_map_index = -1
         self._generate_scenery()
 
     def switch_to_map(self, map_index):
@@ -272,25 +274,47 @@ class MapManager:
                 return x, y
         return cx + random.randint(-200, 200), cy + random.randint(-200, 200)
 
+    def _build_ground_chunk(self):
+        """预渲染一块可平铺的地面纹理：双色棋盘格 + 细微斑点（土豆兄弟式干净地板）。"""
+        gs = GRID_SIZE
+        cells = 8
+        chunk = pygame.Surface((gs * cells, gs * cells))
+        base = self.map_data["bg_color"]
+        alt = tuple(min(255, c + 7) for c in base)
+        edge = tuple(max(0, c - 6) for c in base)
+        rng = random.Random(7100 + self.current_map_index)
+        for cy in range(cells):
+            for cx in range(cells):
+                color = alt if (cx + cy) % 2 == 0 else base
+                rect = pygame.Rect(cx * gs, cy * gs, gs, gs)
+                chunk.fill(color, rect)
+                # 格子内侧暗缘，形成石板拼接感
+                pygame.draw.rect(chunk, edge, rect, 1)
+                # 散布细微斑点，打破平整
+                for _ in range(3):
+                    px = rect.x + rng.randint(4, gs - 5)
+                    py = rect.y + rng.randint(4, gs - 5)
+                    d = rng.choice((-9, -6, 6, 9))
+                    spot = tuple(max(0, min(255, c + d)) for c in color)
+                    chunk.fill(spot, (px, py, 2, 2))
+        return chunk
+
     def draw_background(self, screen, camera):
         """Draw the map background and grid."""
-        screen.fill(self.map_data["bg_color"])
+        if self._ground_chunk is None or self._ground_map_index != self.current_map_index:
+            self._ground_chunk = self._build_ground_chunk()
+            self._ground_map_index = self.current_map_index
 
-        gs = GRID_SIZE
-        start_x = int(camera.offset.x % gs)
-        start_y = int(camera.offset.y % gs)
-        grid_color = self.map_data["grid_color"]
-        minor_color = tuple(max(0, c - 8) for c in grid_color)
+        # 平铺地面纹理
+        chunk = self._ground_chunk
+        cw, ch = chunk.get_size()
+        off_x = int(camera.offset.x) % cw
+        off_y = int(camera.offset.y) % ch
+        for x in range(-off_x, SCREEN_WIDTH, cw):
+            for y in range(-off_y, SCREEN_HEIGHT, ch):
+                screen.blit(chunk, (x, y))
 
-        for x in range(-start_x % (gs // 2), SCREEN_WIDTH, gs // 2):
-            pygame.draw.line(screen, minor_color, (x, 0), (x, SCREEN_HEIGHT))
-        for y in range(-start_y % (gs // 2), SCREEN_HEIGHT, gs // 2):
-            pygame.draw.line(screen, minor_color, (0, y), (SCREEN_WIDTH, y))
-        for x in range(-start_x, SCREEN_WIDTH, gs):
-            pygame.draw.line(screen, grid_color, (x, 0), (x, SCREEN_HEIGHT))
-        for y in range(-start_y, SCREEN_HEIGHT, gs):
-            pygame.draw.line(screen, grid_color, (0, y), (SCREEN_WIDTH, y))
-
+        self._draw_arena_border(screen, camera)
         self._draw_scenery(screen, camera)
         self._draw_mechanics(screen, camera)
         self._draw_vignette(screen)
@@ -300,6 +324,30 @@ class MapManager:
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, min(200, alpha)))
             screen.blit(overlay, (0, 0))
+
+    def _draw_arena_border(self, screen, camera):
+        """竞技场边界：场外压暗 + 粗描边墙，让地图范围一目了然。"""
+        ox, oy = int(camera.offset.x), int(camera.offset.y)
+        left, top = -ox, -oy
+        right, bottom = MAP_WIDTH - ox, MAP_HEIGHT - oy
+        dark = tuple(max(0, c - 10) for c in self.map_data["bg_color"])
+        accent = self.map_data["accent_color"]
+
+        # 场外区域压暗
+        if left > 0:
+            screen.fill(dark, (0, 0, min(left, SCREEN_WIDTH), SCREEN_HEIGHT))
+        if right < SCREEN_WIDTH:
+            screen.fill(dark, (max(0, right), 0, SCREEN_WIDTH - right, SCREEN_HEIGHT))
+        if top > 0:
+            screen.fill(dark, (0, 0, SCREEN_WIDTH, min(top, SCREEN_HEIGHT)))
+        if bottom < SCREEN_HEIGHT:
+            screen.fill(dark, (0, max(0, bottom), SCREEN_WIDTH, SCREEN_HEIGHT - bottom))
+
+        # 边界墙：深色衬底 + 地图主题色描边
+        wall = pygame.Rect(left - 4, top - 4, MAP_WIDTH + 8, MAP_HEIGHT + 8)
+        if wall.colliderect(screen.get_rect().inflate(60, 60)):
+            pygame.draw.rect(screen, (12, 10, 18), wall, 10)
+            pygame.draw.rect(screen, tuple(max(0, c - 25) for c in accent), wall, 4)
 
     def _draw_scenery(self, screen, camera):
         accent = self.map_data["accent_color"]

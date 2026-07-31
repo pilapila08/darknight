@@ -1,17 +1,61 @@
 """基础绘制工具和技能图标"""
 import math
+import os
+import sys
 import pygame
 
 
-def get_font(size):
-    """获取支持中文的字体"""
-    for name in ("microsoft yahei", "simhei", "simsun", "noto sans cjk sc",
-                 "wenquanyi micro hei", "arial unicode ms", "ms gothic"):
+def _resource_path(relative_path):
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, relative_path)
+
+
+_FONT_CACHE = {}
+_CUSTOM_FONT_PATH = None
+_CUSTOM_FONT_CHECKED = False
+
+
+def _find_custom_font():
+    """查找 assets/fonts 下的自定义字体（放入 ttf/otf 即自动生效）"""
+    global _CUSTOM_FONT_PATH, _CUSTOM_FONT_CHECKED
+    if _CUSTOM_FONT_CHECKED:
+        return _CUSTOM_FONT_PATH
+    _CUSTOM_FONT_CHECKED = True
+    fonts_dir = _resource_path(os.path.join("assets", "fonts"))
+    if os.path.isdir(fonts_dir):
+        for name in sorted(os.listdir(fonts_dir)):
+            if name.lower().endswith((".ttf", ".otf", ".ttc")):
+                _CUSTOM_FONT_PATH = os.path.join(fonts_dir, name)
+                break
+    return _CUSTOM_FONT_PATH
+
+
+def get_font(size, bold=False):
+    """获取支持中文的字体（带缓存；优先 assets/fonts 自定义字体）"""
+    key = (size, bold)
+    font = _FONT_CACHE.get(key)
+    if font is not None:
+        return font
+
+    custom = _find_custom_font()
+    if custom:
         try:
-            return pygame.font.SysFont(name, size)
+            font = pygame.font.Font(custom, size)
+            font.set_bold(bold)
         except Exception:
-            continue
-    return pygame.font.Font(None, size)
+            font = None
+    if font is None:
+        for name in ("microsoft yahei", "simhei", "simsun", "noto sans cjk sc",
+                     "wenquanyi micro hei", "arial unicode ms", "ms gothic"):
+            try:
+                font = pygame.font.SysFont(name, size, bold=bold)
+                break
+            except Exception:
+                continue
+    if font is None:
+        font = pygame.font.Font(None, size)
+    _FONT_CACHE[key] = font
+    return font
 
 
 def draw_skill_icon_shape(screen, x, y, size, icon_info):

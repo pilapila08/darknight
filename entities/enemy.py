@@ -43,14 +43,12 @@ class Enemy(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft=(x, y))
 
     def _make_flash_frame(self, frame):
-        flash = frame.copy()
+        # 土豆兄弟式受击反馈：整体变为纯白剪影，识别度最高
         mask = pygame.mask.from_surface(frame)
-        silhouette = mask.to_surface(
-            setcolor=(255, 255, 255, 170),
+        return mask.to_surface(
+            setcolor=(255, 255, 255, 255),
             unsetcolor=(0, 0, 0, 0)
         ).convert_alpha()
-        flash.blit(silhouette, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-        return flash
 
     def take_damage(self, damage):
         self.hp -= damage

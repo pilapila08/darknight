@@ -4,12 +4,46 @@
 
 ## 版本更新记录
 
+### v3.8 (2026-07-31) - 打击感与光照系统 + 音效外放支持
+
+**打击感系统（新增 `effects/juice.py`）：**
+- 命中顿帧：击中敌人时短暂冻结游戏逻辑（保留相机震动），强化打击反馈。
+- 死亡残影：敌人死亡时白色轮廓放大淡出，增强击杀表现。
+- 命中火花：沿子弹方向飞散带衰减的短线条火花，暴击反馈更醒目。
+- 枪口火光：射击时枪口产生方向性闪光。
+- 全屏闪光与低血量脉动，丰富战斗氛围。
+
+**动态光照系统（新增 `systems/lighting.py`）：**
+- 全屏环境暗色 + 动态光源，乘法混合实现：光源处保持原亮度，其余区域被压暗降温。
+- 5 张地图各有专属环境色调：墓地冷灰蓝 / 沼泽阴绿 / 庭院暗紫 / 废墟锈棕 / 虚空深紫。
+- 普通模式和测试模式均已接入。
+
+**音效系统升级（`systems/audio_manager.py`）：**
+- 支持外部音效文件：`assets/sounds/` 下存在同名 wav/ogg 时优先加载，否则回退标准库合成。
+- 覆盖 11 个音效位：shoot / enemy_death / level_up / hit / explosion / pickup / hurt / boss_warning / boss_death / ui_click / music。
+- 兼容 PyInstaller 打包资源路径（`_MEIPASS`）。
+
+**画面与 UI：**
+- 地图地面改为预渲染可平铺纹理块（双色棋盘格 + 石板暗缘 + 斑点），提升渲染性能。
+- Boss 血条新增登场展开动画与掉血延迟条。
+- 自定义字体文件支持与字体缓存（`ui/drawables.py`）。
+- 升级选卡、开始/结算界面、HUD 样式打磨。
+- 伤害数字表现增强（`entities/damage_number.py`）。
+
+**工程与打包：**
+- 新增无窗口冒烟测试 `_smoke_test.py`，验证新系统可初始化、无运行时异常。
+- 补充单文件 exe 产物说明：`release/Darknight-standalone-win64.exe`，可直接双击运行。
+
+---
+
 ### v3.7 (2026-06-18) - 轻量化可玩包体
 
 **打包产物：**
+- 新增无环境单文件 exe：`release/Darknight-standalone-win64.exe`，可直接双击运行。
 - 新增轻量 Windows 可玩包：`release/Darknight-light-win64.zip`。
 - 解压后运行 `Darknight/Darknight.exe` 即可开始游戏。
 - 采用 PyInstaller `--onedir --windowed` 打包，启动速度更稳定，压缩包体积约 18MB。
+- 单文件 exe 采用 PyInstaller `--onefile --windowed` 打包，内置 Python 运行时、pygame、代码和美术资源。
 
 **轻量化处理：**
 - 移除运行依赖中的 `numpy`，当前 `requirements.txt` 只保留 `pygame`。

@@ -14,6 +14,7 @@ class Player:
         self.speed = PLAYER_SPEED
         self.max_hp = PLAYER_MAX_HP  # 血量上限
         self._was_moving = False
+        self._tilt = 0.0  # 移动时的身体倾斜角（土豆兄弟式动态）
 
     def update(self, dt, keys):
         dx = 0
@@ -38,6 +39,10 @@ class Player:
         else:
             self.anim.reset()
 
+        # 向移动方向倾斜，停下时回正
+        target_tilt = -dx * 8.0
+        self._tilt += (target_tilt - self._tilt) * min(1.0, 12.0 * dt)
+
         self.rect.clamp_ip(pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT))
         self._was_moving = is_moving
 
@@ -48,4 +53,9 @@ class Player:
         pygame.draw.ellipse(glow, (90, 190, 255, 70), glow.get_rect())
         screen.blit(glow, (screen_rect.centerx - glow.get_width() // 2,
                            screen_rect.bottom - glow.get_height() // 2))
-        screen.blit(self.anim.get_image(), screen_rect)
+        image = self.anim.get_image()
+        if abs(self._tilt) > 0.5:
+            image = pygame.transform.rotate(image, self._tilt)
+        # 以脚底中心对齐，旋转时不会浮离地面
+        rect = image.get_rect(midbottom=(screen_rect.centerx, screen_rect.bottom))
+        screen.blit(image, rect)

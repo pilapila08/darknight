@@ -1,14 +1,26 @@
 """
 AudioManager — synthesizes and plays all game audio.
-No external asset files needed; everything is generated with the standard library.
+默认用标准库合成所有音效；若 assets/sounds/ 下存在同名 wav 文件则优先加载
+（shoot.wav / enemy_death.wav / level_up.wav / hit.wav / explosion.wav /
+ pickup.wav / hurt.wav / boss_warning.wav / boss_death.wav / ui_click.wav / music.wav）。
 """
 from array import array
 import math
+import os
 import random
+import sys
 import pygame
 
 
 SAMPLE_RATE = 22050
+
+
+def _resource_path(relative_path):
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, relative_path)
+
+
+SOUNDS_DIR = _resource_path(os.path.join("assets", "sounds"))
 
 
 def _clamp(value, low=-1.0, high=1.0):
@@ -25,6 +37,23 @@ def _make_sound(samples):
     return pygame.mixer.Sound(buffer=pcm)
 
 
+def _load_external(name):
+    """尝试加载外部音效文件，不存在返回 None。"""
+    path = os.path.join(SOUNDS_DIR, name + ".wav")
+    if os.path.isfile(path):
+        try:
+            return pygame.mixer.Sound(path)
+        except Exception:
+            return None
+    path = os.path.join(SOUNDS_DIR, name + ".ogg")
+    if os.path.isfile(path):
+        try:
+            return pygame.mixer.Sound(path)
+        except Exception:
+            return None
+    return None
+
+
 def _envelope_at(index, count, attack=0.005, release=None):
     """Linear attack-release envelope value for one sample."""
     attack_n = int(SAMPLE_RATE * attack)
@@ -39,7 +68,7 @@ def _envelope_at(index, count, attack=0.005, release=None):
     return amp
 
 
-def _generate_shoot():
+def _generate_shoot(pitch=1.0):
     dur = 0.04
     count = int(SAMPLE_RATE * dur)
     noise_count = int(SAMPLE_RATE * 0.005)
@@ -47,11 +76,26 @@ def _generate_shoot():
     for i in range(count):
         t = i / SAMPLE_RATE
         env = _envelope_at(i, count, attack=0.002, release=0.02)
-        value = math.sin(2 * math.pi * 800 * t) * env
-        value += math.sin(2 * math.pi * 1200 * t) * env * 0.3
+        value = math.sin(2 * math.pi * 800 * pitch * t) * env
+        value += math.sin(2 * math.pi * 1200 * pitch * t) * env * 0.3
         if i < noise_count:
             value += random.uniform(-1, 1) * 0.2 * (1 - i / noise_count)
-        samples.append(value * 0.7)
+        samples.append(value * 0.55)
+    return _make_sound(samples)
+
+
+def _generate_hit(pitch=1.0):
+    """命中音：短促的中频噼啪。"""
+    dur = 0.05
+    count = int(SAMPLE_RATE * dur)
+    samples = []
+    freq = 420 * pitch
+    for i in range(count):
+        t = i / SAMPLE_RATE
+        env = _envelope_at(i, count, attack=0.001, release=0.04)
+        value = math.sin(2 * math.pi * freq * t * (1 - t * 4)) * env * 0.7
+        value += random.uniform(-1, 1) * env * 0.35
+        samples.append(value * 0.5)
     return _make_sound(samples)
 
 
@@ -75,6 +119,100 @@ def _generate_death_variants(count=5):
     return variants
 
 
+def _generate_explosion():
+    """爆炸：低频轰鸣 + 大量噪声，指数衰减。"""
+    dur = 0.45
+    count = int(SAMPLE_RATE * dur)
+    samples = []
+    for i in range(count):
+        t = i / SAMPLE_RATE
+        decay = math.exp(-t * 8)
+        value = math.sin(2 * math.pi * 55 * t) * decay * 0.8
+        value += math.sin(2 * math.pi * 38 * t) * decay * 0.6
+        value += random.uniform(-1, 1) * decay * 0.7
+        samples.append(value * 0.7)
+    return _make_sound(samples)
+
+
+def _generate_pickup():
+    """拾取：两个快速上行音。"""
+    notes = [660, 990]
+    note_dur = 0.05
+    samples = []
+    note_count = int(SAMPLE_RATE * note_dur)
+    for freq in notes:
+        for i in range(note_count):
+            t = i / SAMPLE_RATE
+            env = _envelope_at(i, note_count, attack=0.004, release=0.03)
+            value = math.sin(2 * math.pi * freq * t) * env
+            value += math.sin(2 * math.pi * freq * 2 * t) * env * 0.2
+            samples.append(value * 0.5)
+    return _make_sound(samples)
+
+
+def _generate_hurt():
+    """玩家受击：低沉闷响 + 快速下滑音。"""
+    dur = 0.18
+    count = int(SAMPLE_RATE * dur)
+    samples = []
+    for i in range(count):
+        t = i / SAMPLE_RATE
+        decay = math.exp(-t * 14)
+        freq = 220 * (1 - t * 2.5)
+        value = math.sin(2 * math.pi * max(40, freq) * t) * decay * 0.9
+        value += random.uniform(-1, 1) * decay * 0.4
+        samples.append(value * 0.65)
+    return _make_sound(samples)
+
+
+def _generate_boss_warning():
+    """Boss警报：两声低沉的警笛。"""
+    samples = []
+    for _ in range(2):
+        dur = 0.4
+        count = int(SAMPLE_RATE * dur)
+        for i in range(count):
+            t = i / SAMPLE_RATE
+            env = _envelope_at(i, count, attack=0.02, release=0.15)
+            sweep = 160 + 90 * math.sin(math.pi * t / dur)
+            value = math.sin(2 * math.pi * sweep * t) * env * 0.7
+            value += math.sin(2 * math.pi * sweep * 0.5 * t) * env * 0.45
+            samples.append(value * 0.6)
+        # 间隔
+        samples.extend([0.0] * int(SAMPLE_RATE * 0.12))
+    return _make_sound(samples)
+
+
+def _generate_boss_death():
+    """Boss死亡：长爆炸 + 下行音阶。"""
+    dur = 0.9
+    count = int(SAMPLE_RATE * dur)
+    samples = []
+    for i in range(count):
+        t = i / SAMPLE_RATE
+        decay = math.exp(-t * 3.5)
+        freq = 200 * (1 - t * 0.7)
+        value = math.sin(2 * math.pi * max(30, freq) * t) * decay * 0.7
+        value += random.uniform(-1, 1) * decay * 0.55
+        value += math.sin(2 * math.pi * 48 * t) * decay * 0.5
+        samples.append(value * 0.7)
+    return _make_sound(samples)
+
+
+def _generate_ui_click():
+    """UI确认：干净的短促高音。"""
+    dur = 0.07
+    count = int(SAMPLE_RATE * dur)
+    samples = []
+    for i in range(count):
+        t = i / SAMPLE_RATE
+        env = _envelope_at(i, count, attack=0.002, release=0.05)
+        value = math.sin(2 * math.pi * 880 * t) * env
+        value += math.sin(2 * math.pi * 1320 * t) * env * 0.3
+        samples.append(value * 0.45)
+    return _make_sound(samples)
+
+
 def _generate_level_up():
     """Rising arpeggio chime: C5-E5-G5-C6"""
     notes = [523, 659, 784, 1047]
@@ -93,37 +231,75 @@ def _generate_level_up():
 
 
 def _generate_music_loop():
-    """8-second ambient drone loop."""
-    duration = 8.0
+    """16秒分层氛围循环：低音脉冲 + 和声垫 + 稀疏琶音旋律。"""
+    duration = 16.0
     count = int(SAMPLE_RATE * duration)
     fade_count = int(SAMPLE_RATE * 0.5)
+
+    # A小调进行：Am - F - C - G（每小节4秒）
+    chords = [
+        (110.0, 130.81, 164.81),   # A2 C3 E3
+        (87.31, 110.0, 130.81),    # F2 A2 C3
+        (65.41, 82.41, 98.0),      # C2 E2 G2
+        (98.0, 123.47, 146.83),    # G2 B2 D3
+    ]
+    # 琶音音符（每0.5秒一个，来自当前和弦的高八度）
     samples = []
     for i in range(count):
         t = i / SAMPLE_RATE
-        lfo = math.sin(2 * math.pi * 0.25 * t) * 0.3 + 0.7
-        value = math.sin(2 * math.pi * 55 * t) * lfo * 0.25
-        value += math.sin(2 * math.pi * 27.5 * t) * 0.15
-        value += math.sin(2 * math.pi * 110 * t) * 0.1
-        value += math.sin(2 * math.pi * 165 * t) * 0.08
-        sweep = math.sin(2 * math.pi * 0.15 * t) * 0.5 + 0.5
-        value += math.sin(2 * math.pi * 220 * t) * sweep * 0.06
+        bar = int(t / 4.0) % 4
+        root, third, fifth = chords[bar]
+
+        # 低音：脉冲式（每秒两次）
+        beat = (t * 2.0) % 1.0
+        bass_env = math.exp(-beat * 5) * 0.5 + 0.15
+        value = math.sin(2 * math.pi * root * t) * bass_env * 0.30
+
+        # 和声垫：缓慢起伏
+        lfo = math.sin(2 * math.pi * 0.12 * t) * 0.25 + 0.75
+        value += math.sin(2 * math.pi * third * 2 * t) * lfo * 0.075
+        value += math.sin(2 * math.pi * fifth * 2 * t) * lfo * 0.06
+
+        # 琶音：每0.5秒触发，随小节循环 根-五-三-五
+        step = int(t / 0.5)
+        seq = (root * 4, fifth * 4, third * 4, fifth * 4)
+        note = seq[step % 4]
+        note_t = (t % 0.5)
+        pluck = math.exp(-note_t * 6)
+        value += math.sin(2 * math.pi * note * t) * pluck * 0.085
+        value += math.sin(2 * math.pi * note * 2 * t) * pluck * 0.03
+
         if i < fade_count:
             value *= i / fade_count
         elif i >= count - fade_count:
             value *= (count - i) / fade_count
-        samples.append(value * 0.5)
+        samples.append(value * 0.55)
     return _make_sound(samples)
 
 
 class AudioManager:
     def __init__(self):
-        # SFX
-        self._shoot = _generate_shoot()
-        self._death_variants = _generate_death_variants(5)
-        self._level_up = _generate_level_up()
+        # SFX（外部文件优先，缺失时合成）
+        self._shoot = _load_external("shoot") or _generate_shoot()
+        self._shoot_variants = [self._shoot,
+                                _generate_shoot(0.95), _generate_shoot(1.06)]
+        self._death_variants = _load_external("enemy_death")
+        if self._death_variants:
+            self._death_variants = [self._death_variants]
+        else:
+            self._death_variants = _generate_death_variants(5)
+        self._level_up = _load_external("level_up") or _generate_level_up()
+        self._hit_variants = [_load_external("hit") or _generate_hit(p)
+                              for p in (0.9, 1.0, 1.12)]
+        self._explosion = _load_external("explosion") or _generate_explosion()
+        self._pickup = _load_external("pickup") or _generate_pickup()
+        self._hurt = _load_external("hurt") or _generate_hurt()
+        self._boss_warning = _load_external("boss_warning") or _generate_boss_warning()
+        self._boss_death = _load_external("boss_death") or _generate_boss_death()
+        self._ui_click = _load_external("ui_click") or _generate_ui_click()
 
         # Music
-        self._music_loop = _generate_music_loop()
+        self._music_loop = _load_external("music") or _generate_music_loop()
         self._music_channel = None
         self._music_playing = False
 
@@ -131,22 +307,87 @@ class AudioManager:
         self._sfx_volume = 0.6
         self._music_volume = 0.4
 
+        # 侧链闪避（大音效时压低BGM）
+        self._duck_amount = 0.0
+        self._duck_timer = 0.0
+
+        # 高频音效限流
+        self._hit_cooldown = 0.0
+
     # --- SFX ---
 
     def play_shoot(self):
-        self._shoot.set_volume(self._sfx_volume)
-        self._shoot.play()
+        s = random.choice(self._shoot_variants)
+        s.set_volume(self._sfx_volume * 0.85)
+        s.play()
+
+    def play_hit(self):
+        if self._hit_cooldown > 0:
+            return
+        self._hit_cooldown = 0.05
+        s = random.choice(self._hit_variants)
+        s.set_volume(self._sfx_volume * random.uniform(0.4, 0.55))
+        s.play()
 
     def play_enemy_death(self):
         s = random.choice(self._death_variants)
-        # Add subtle pitch variation via playback rate (not directly supported,
-        # so we rely on the pre-generated variants)
         s.set_volume(self._sfx_volume * random.uniform(0.85, 1.0))
         s.play()
 
     def play_level_up(self):
         self._level_up.set_volume(self._sfx_volume)
         self._level_up.play()
+        self.duck(0.5, 0.6)
+
+    def play_explosion(self):
+        self._explosion.set_volume(self._sfx_volume * 0.9)
+        self._explosion.play()
+        self.duck(0.35, 0.4)
+
+    def play_pickup(self):
+        self._pickup.set_volume(self._sfx_volume * 0.7)
+        self._pickup.play()
+
+    def play_hurt(self):
+        self._hurt.set_volume(self._sfx_volume)
+        self._hurt.play()
+        self.duck(0.4, 0.35)
+
+    def play_boss_warning(self):
+        self._boss_warning.set_volume(self._sfx_volume)
+        self._boss_warning.play()
+        self.duck(0.6, 1.2)
+
+    def play_boss_death(self):
+        self._boss_death.set_volume(self._sfx_volume)
+        self._boss_death.play()
+        self.duck(0.7, 1.0)
+
+    def play_ui_click(self):
+        self._ui_click.set_volume(self._sfx_volume * 0.8)
+        self._ui_click.play()
+
+    # --- 闪避与更新 ---
+
+    def duck(self, amount, duration):
+        """短暂压低BGM音量，突出关键音效。"""
+        if amount > self._duck_amount:
+            self._duck_amount = amount
+        self._duck_timer = max(self._duck_timer, duration)
+
+    def update(self, dt):
+        if self._hit_cooldown > 0:
+            self._hit_cooldown -= dt
+        if self._duck_timer > 0:
+            self._duck_timer -= dt
+            if self._duck_timer <= 0:
+                self._duck_amount = 0.0
+        else:
+            # 平滑恢复
+            self._duck_amount = max(0.0, self._duck_amount - 1.5 * dt)
+        if self._music_playing:
+            vol = self._music_volume * (1.0 - self._duck_amount)
+            self._music_loop.set_volume(max(0.0, vol))
 
     # --- Music ---
 

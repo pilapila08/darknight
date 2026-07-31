@@ -5,10 +5,17 @@ All characters drawn with pygame primitives at native resolution.
 import os
 import random
 import math
+import sys
 import pygame
 from array import array
 
-ASSETS = "assets"
+
+def _resource_path(relative_path):
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, relative_path)
+
+
+ASSETS = _resource_path("assets")
 SPRITES = os.path.join(ASSETS, "sprites")
 SOUNDS = os.path.join(ASSETS, "sounds")
 SAMPLE_RATE = 22050
@@ -316,6 +323,24 @@ def _gen_orb_surf(radius, color):
 GOLD = (255, 200, 0)
 CYAN = (100, 200, 255)
 
+# 卡通描边颜色（深色，土豆兄弟式的统一视觉语言）
+OUTLINE_COLOR = (18, 14, 26)
+
+
+def _apply_outline(frame, color=OUTLINE_COLOR, thickness=2):
+    """给精灵加粗描边：用 mask 剪影向 8 方向偏移铺底，再盖上原图。"""
+    mask = pygame.mask.from_surface(frame)
+    sil = mask.to_surface(setcolor=(*color, 255),
+                          unsetcolor=(0, 0, 0, 0)).convert_alpha()
+    out = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+    t2 = thickness * thickness
+    for dx in range(-thickness, thickness + 1):
+        for dy in range(-thickness, thickness + 1):
+            if (dx or dy) and dx * dx + dy * dy <= t2:
+                out.blit(sil, (dx, dy))
+    out.blit(frame, (0, 0))
+    return out
+
 
 # ---- Sound helpers ----
 
@@ -369,22 +394,27 @@ def load_image(name, fallback_color, size, animated=False):
             fh = img.get_height()
             frames = [pygame.transform.scale(img.subsurface((c * fw, 0, fw, fh)), (size, size))
                       for c in range(3)]
-            return frames
-        return [pygame.transform.scale(img, (size, size))]
+            return [_apply_outline(f) for f in frames]
+        img = pygame.transform.scale(img, (size, size))
+        if "bullet" in name or "orb" in name:
+            return [img]
+        return [_apply_outline(img)]
 
     # ---- Fallback: generated pixel art ----
     if animated:
         if name == "player":
-            return _gen_player_frames(size, fallback_color)
-        if name == "elite":
-            return _gen_elite_frames(size, fallback_color)
-        if name == "charger":
-            return _gen_charger_frames(size, fallback_color)
-        if name == "ranger":
-            return _gen_ranger_frames(size, fallback_color)
-        if name == "exploder":
-            return _gen_exploder_frames(size, fallback_color)
-        return _gen_enemy_frames(size, fallback_color)
+            frames = _gen_player_frames(size, fallback_color)
+        elif name == "elite":
+            frames = _gen_elite_frames(size, fallback_color)
+        elif name == "charger":
+            frames = _gen_charger_frames(size, fallback_color)
+        elif name == "ranger":
+            frames = _gen_ranger_frames(size, fallback_color)
+        elif name == "exploder":
+            frames = _gen_exploder_frames(size, fallback_color)
+        else:
+            frames = _gen_enemy_frames(size, fallback_color)
+        return [_apply_outline(f) for f in frames]
 
     if "bullet" in name:
         return [_gen_bullet_surf(size // 2, fallback_color)]

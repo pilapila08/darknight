@@ -22,7 +22,9 @@ from entities import XpOrb, Particle, DamageNumber, Explosion, TrapManager
 from entities import HealthPack, ShieldPickup
 from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
+from effects.juice import EffectManager
 from systems import Camera, AudioManager, load_high_score, save_high_score
+from systems.lighting import LightingSystem
 from systems.map_manager import MapManager, MAP_CONFIGS
 from skills import get_random_skills, apply_skill
 from ui import draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection, draw_pause_menu, get_font
@@ -80,6 +82,8 @@ class NormalGame:
         self.boss_projectiles = pygame.sprite.Group()
         self.area_effects = []
         self.map_manager = MapManager()
+        self.effects = EffectManager(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.lighting = LightingSystem()
         self.warning_flash_alpha = 0
         self.warning_flash_dir = 1
 
@@ -103,6 +107,7 @@ class NormalGame:
 
             self._handle_events()
             self._update(dt)
+            self.audio.update(dt)
             self._render()
 
             pygame.display.flip()
@@ -187,6 +192,7 @@ class NormalGame:
 
     def _apply_skill(self, skill):
         """应用技能"""
+        self.audio.play_ui_click()
         apply_skill(self.game_state.stats, skill)
         self.game_state.apply_skill_update(skill, self.player, self.blade_mgr)
         self.game_state.chosen_skills = None
@@ -291,6 +297,12 @@ class NormalGame:
 
         # ESC 暂停或技能选择时跳过游戏逻辑
         if self.game_state.escaped or self.game_state.paused:
+            return
+
+        # 打击感效果更新；顿帧期间冻结游戏逻辑（保留相机震动）
+        self.effects.update(dt)
+        if self.effects.consume_hitstop(dt):
+            self.camera.update(self.player.rect, dt)
             return
 
         self.game_state.elapsed_time += dt
@@ -474,6 +486,10 @@ class NormalGame:
                     tx = self.player.rect.centerx + math.cos(angle) * 100
                     ty = self.player.rect.centery + math.sin(angle) * 100
                     self.bullets.add(Bullet(self.player.rect.centerx, self.player.rect.centery, (tx, ty), bullet_speed_mult))
+                # 枪口火光
+                mx = self.player.rect.centerx + math.cos(base_angle) * 24
+                my = self.player.rect.centery + math.sin(base_angle) * 24
+                self.effects.add_muzzle_flash(mx, my, base_angle)
             self.audio.play_shoot()
 
     def _update_weapons(self, dt):
@@ -597,15 +613,30 @@ class NormalGame:
         is_crit = random.random() < self.game_state.stats["crit_chance"]
         if is_crit:
             dmg *= self.game_state.stats["crit_multiplier"]
-            dx = enemy.rect.centerx - self.player.rect.centerx
-            dy = enemy.rect.centery - self.player.rect.centery
-            dist = math.hypot(dx, dy)
-            if dist > 0:
-                enemy.rect.x += (dx / dist) * 12
-                enemy.rect.y += (dy / dist) * 12
+
+        # 命中反馈：沿子弹方向的火花 + 击退
+        bvx = getattr(bullet, "vx", 0.0)
+        bvy = getattr(bullet, "vy", 0.0)
+        speed = math.hypot(bvx, bvy)
+        if speed > 0:
+            nx, ny = bvx / speed, bvy / speed
+        else:
+            nx, ny = 0.0, -1.0
+        if is_crit:
+            self.effects.add_sparks(enemy.rect.centerx, enemy.rect.centery,
+                                    nx, ny, color=(255, 230, 120), count=7)
+            self.effects.trigger_hitstop(0.03)
+        else:
+            self.effects.add_sparks(enemy.rect.centerx, enemy.rect.centery, nx, ny)
+        self.audio.play_hit()
+        if not isinstance(enemy, Boss):
+            kb = 16 if is_crit else 6
+            enemy.rect.x += int(nx * kb)
+            enemy.rect.y += int(ny * kb)
 
         dead = enemy.take_damage(dmg)
-        self.damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top, int(dmg), self.dmg_font))
+        self.damage_numbers.append(DamageNumber(enemy.rect.centerx, enemy.rect.top,
+                                                int(dmg), self.dmg_font, crit=is_crit))
 
         if dead:
             self._kill_enemy(enemy)
@@ -628,10 +659,18 @@ class NormalGame:
         for _ in range(count):
             self.particles.add(Particle(enemy.rect.centerx, enemy.rect.centery, enemy._base_color))
 
+        # 死亡残影；精英额外顿帧+震动
+        self.effects.add_death_ghost(enemy.image, enemy.rect.center)
+        if enemy.is_elite:
+            self.effects.trigger_hitstop(0.05)
+            self.camera.shake(0.18, 5)
+
         if enemy.is_elite:
             base_xp = 3
         elif isinstance(enemy, Exploder):
             self.explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery, enemy.explosion_damage))
+            self.audio.play_explosion()
+            self.camera.shake(0.2, 7)
             base_xp = 1
         else:
             base_xp = 1
@@ -672,6 +711,12 @@ class NormalGame:
                 absorbed = min(self.game_state.player_shield, final_damage)
                 self.game_state.player_shield -= absorbed
                 final_damage -= absorbed
+            # 受击反馈：护盾吸收闪蓝，掉血闪红
+            if final_damage > 0:
+                self.effects.screen_flash((235, 45, 40), 85)
+            else:
+                self.effects.screen_flash((80, 170, 255), 60)
+            self.audio.play_hurt()
             self.game_state.player_hp -= final_damage
             self.game_state.invincible_timer = PLAYER_INVINCIBLE_TIME
 
@@ -713,6 +758,7 @@ class NormalGame:
                         self.game_state.player_max_shield,
                         self.game_state.player_shield + drop.amount
                     )
+                self.audio.play_pickup()
                 drop.kill()
 
     def _check_level_up(self):
@@ -798,9 +844,18 @@ class NormalGame:
         if self.game_state.stats.get("has_lightning", 0) > 0:
             self.chain_lightning.draw(self.screen, self.camera)
 
-        # 爆炸和伤害数字
+        # 爆炸
         for exp in self.explosions:
             exp.draw(self.screen, self.camera)
+
+        # 打击感效果（世界层：残影/火花/枪口火光）
+        self.effects.draw_world(self.screen, self.camera)
+
+        # 暗夜光照
+        self._submit_lights()
+        self.lighting.render(self.screen, self.camera)
+
+        # 伤害数字（在光照之上，保证可读性）
         for dn in self.damage_numbers:
             dn.draw(self.screen, self.camera)
 
@@ -818,6 +873,10 @@ class NormalGame:
                  self.game_state.player_shield, self.game_state.player_max_shield)
         draw_skill_bar(self.screen, self.font, self.game_state.acquired_skills,
                       pygame.mouse.get_pos(), self.game_state.elapsed_time, self.game_state.stats)
+
+        # 全屏打击感效果（受击闪光/低血量脉动）
+        hp_ratio = self.game_state.player_hp / max(1, current_max_hp)
+        self.effects.draw_screen(self.screen, hp_ratio)
 
         # Boss血条
         if self.game_state.boss_active:
@@ -860,6 +919,32 @@ class NormalGame:
         title = f"击杀:{self.game_state.score} | DPS:{player_dps:.0f} | {time_str} | {map_name} | 新星:{self.game_state.stats.get('has_blades', 0)}"
         pygame.display.set_caption(title)
 
+    def _submit_lights(self):
+        """登记本帧所有光源（玩家/子弹/经验球/爆炸/Boss等）"""
+        L = self.lighting
+        px, py = self.player.rect.center
+        L.add_light(px, py, 330, (255, 238, 198))
+        for bullet in self.bullets:
+            L.add_light(bullet.rect.centerx, bullet.rect.centery, 55, (150, 195, 255), 0.85)
+        for eb in self.enemy_bullets:
+            L.add_light(eb.rect.centerx, eb.rect.centery, 46, (255, 130, 100), 0.8)
+        for bp in self.boss_projectiles:
+            L.add_light(bp.rect.centerx, bp.rect.centery, 70, (255, 120, 120), 0.9)
+        for orb in self.orbs:
+            L.add_light(orb.rect.centerx, orb.rect.centery, 38, (255, 220, 120), 0.55)
+        for drop in self.drops:
+            color = (120, 255, 150) if drop.kind == "health" else (110, 200, 255)
+            L.add_light(drop.rect.centerx, drop.rect.centery, 52, color, 0.7)
+        for exp in self.explosions:
+            L.add_light(exp.x, exp.y, 180, (255, 170, 80))
+        for boss in self.bosses:
+            c = boss.config.get("color", (255, 80, 80))
+            glow = tuple(min(255, v + 90) for v in c)
+            L.add_light(boss.rect.centerx, boss.rect.centery, 200, glow, 0.75)
+        if self.game_state.stats.get("has_traps", 0) > 0:
+            for trap in self.trap_mgr.group:
+                L.add_light(trap.rect.centerx, trap.rect.centery, 60, (140, 240, 120), 0.5)
+
     # --- Boss System ---
 
     def _check_boss_spawn(self):
@@ -878,6 +963,7 @@ class NormalGame:
         self.warning_flash_alpha = 0
         self.warning_flash_dir = 1
         self._boss_clear_done = False
+        self.audio.play_boss_warning()
 
     def _update_boss_warning(self, dt):
         self.game_state.boss_warning_timer -= dt
@@ -963,6 +1049,11 @@ class NormalGame:
         for _ in range(30):
             self.particles.add(Particle(boss.rect.centerx, boss.rect.centery,
                                         boss.config.get("color", (255, 50, 50))))
+        # Boss 击杀：长顿帧 + 白屏闪光 + 大残影 + 强震动
+        self.effects.trigger_hitstop(0.25)
+        self.effects.screen_flash((255, 255, 255), 170)
+        self.effects.add_death_ghost(boss.image, boss.rect.center)
+        self.audio.play_boss_death()
         self.camera.shake(0.5, 15)
         greedy_count = self.game_state.stats.get("greedy_count", 0)
         greedy_mult = 1.0 + 0.15 * greedy_count
@@ -978,6 +1069,7 @@ class NormalGame:
         next_map = self.game_state.boss_defeated_count
         if next_map < len(MAP_CONFIGS):
             self.map_manager.switch_to_map(next_map)
+            self.lighting.set_map(next_map)
 
     def _update_area_effects(self, dt):
         for ae in list(self.area_effects):
@@ -992,22 +1084,46 @@ class NormalGame:
         config = getattr(self, '_pending_boss_config', None)
         if not config:
             return
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        # 登场仪式：电影黑边 + 大字横幅 + 展开分割线
+        progress = 1.0 - self.game_state.boss_warning_timer / BOSS_WARNING_DURATION
+        appear = min(1.0, progress / 0.25)          # 前25%时间入场
         flash_color = config.get("color", (255, 50, 50))
+        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+
+        # 上下黑边（letterbox）滑入
+        bar_h = int(70 * appear)
+        if bar_h > 0:
+            pygame.draw.rect(self.screen, (0, 0, 0), (0, 0, SCREEN_WIDTH, bar_h))
+            pygame.draw.rect(self.screen, (0, 0, 0),
+                             (0, SCREEN_HEIGHT - bar_h, SCREEN_WIDTH, bar_h))
+
+        # 背景暗化 + 呼吸色边框
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, int(110 * appear)))
         alpha = int(self.warning_flash_alpha)
-        overlay.fill((*flash_color, min(60, alpha)))
-        screen_center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         pygame.draw.rect(overlay, (*flash_color, alpha), (0, 0, SCREEN_WIDTH, 4))
         pygame.draw.rect(overlay, (*flash_color, alpha), (0, SCREEN_HEIGHT - 4, SCREEN_WIDTH, 4))
         pygame.draw.rect(overlay, (*flash_color, alpha), (0, 0, 4, SCREEN_HEIGHT))
         pygame.draw.rect(overlay, (*flash_color, alpha), (SCREEN_WIDTH - 4, 0, 4, SCREEN_HEIGHT))
         self.screen.blit(overlay, (0, 0))
-        warn_text = f"!! 警告 : {config['name']} 即将到来 !!"
-        text_surf = self.big_font.render(warn_text, True, GOLD)
-        text_rect = text_surf.get_rect(center=screen_center)
-        shadow_surf = self.big_font.render(warn_text, True, RED)
-        self.screen.blit(shadow_surf, text_rect.move(2, 2))
-        self.screen.blit(text_surf, text_rect)
+
+        # 从中心向两侧展开的分割线
+        line_w = int(SCREEN_WIDTH * 0.42 * appear)
+        glow = tuple(min(255, c + 80) for c in flash_color)
+        for dy, sub_w in ((-52, line_w), (52, line_w)):
+            pygame.draw.line(self.screen, glow, (cx - sub_w, cy + dy), (cx + sub_w, cy + dy), 2)
+
+        # 横幅文字：警告小字 + Boss名大字
+        warn_font = ui_get_font(20)
+        warn_text = warn_font.render("——  强大的敌人逼近  ——", True, glow)
+        self.screen.blit(warn_text, warn_text.get_rect(center=(cx, cy - 34)))
+
+        name_font = ui_get_font(58, bold=True)
+        name_surf = name_font.render(config['name'], True, GOLD)
+        shadow_surf = name_font.render(config['name'], True, (120, 20, 20))
+        name_rect = name_surf.get_rect(center=(cx, cy + 8))
+        self.screen.blit(shadow_surf, name_rect.move(3, 3))
+        self.screen.blit(name_surf, name_rect)
 
     def _render_map_transition(self):
         alpha = int(200 * min(1.0, self.map_manager.transition_timer / MAP_TRANSITION_DURATION))
