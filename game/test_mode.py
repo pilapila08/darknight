@@ -14,10 +14,10 @@ class TestModeHandler:
     def __init__(self):
         self.auto_spawn = False
 
-    def handle_skill_click(self, skill, stats, player, blade_mgr):
-        """处理技能面板点击"""
+    def handle_skill_click(self, skill, stats, player, blade_mgr, character=None):
+        """处理技能面板点击（character 用于 R5 专属被动）"""
         from skills import apply_skill
-        apply_skill(stats, skill)
+        apply_skill(stats, skill, character)
         player.speed = stats["player_speed"]
         if skill["key"] == "has_blades":
             blade_mgr.set_count(stats.get("blade_count", 3))

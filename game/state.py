@@ -4,48 +4,27 @@ from settings import (
     CRIT_MULTIPLIER, PLAYER_MAX_HP, REGEN_KILLS_INITIAL,
     ENEMY_HP, ENEMY_SPEED, ENEMY_SIZE, RED
 )
+from characters import CHARACTERS
 
 
 class GameState:
     """游戏状态类，管理所有游戏数据"""
 
-    def __init__(self):
-        self.reset()
+    def __init__(self, character="default"):
+        self.character = character
+        self.reset(character)
 
-    def reset(self):
-        """重置所有游戏状态"""
-        self.stats = {
-            "fire_interval": FIRE_INTERVAL,
-            "bullet_damage": BULLET_BASE_DAMAGE,
-            "player_speed": PLAYER_SPEED,
-            "bullet_count": BULLET_COUNT_BASE,
-            "damage_taken": 1.0,
-            "crit_chance": 0.0,
-            "crit_multiplier": CRIT_MULTIPLIER,
-            "greedy_count": 0,       # 贪婪之魂计数（经验×(1+0.15n)）
-            "bullet_speed": 1.0,    # 子弹速度倍率
-            "bullet_pierce": 0,     # 穿透弹：额外穿透目标数（R3 B1）
-            "bullet_damage_mult": 1.0,  # 穿透弹伤害倍率（首取×0.85）
-            "bullet_speed_damage_mult": 1.0,  # 保留字段：旧存档兼容，不再由急速子弹提升
-            "regen_kills": 0,        # 复苏之风需要击杀数（0表示未获得）
-            "regen_kills_progress": 0,
-            "regen_hp_amount": 1,    # 复苏之风每次回复血量
-            "max_hp": PLAYER_MAX_HP, # 血量上限
-            "has_blades": 0,
-            "blade_count": 0,  # 兼容字段：暗影新星层数
-            "blade_damage": 0,  # 暗影新星伤害
-            "nova_cooldown": 3.8,
-            "nova_radius": 150,
-            "has_lightning": 0,
-            "lightning_chains": 0,  # 闪电弹跳次数
-            "lightning_damage": 0,  # 闪电伤害
-            "has_traps": 0,
-            "trap_interval": 2.0,  # 陷阱释放间隔（状态初始值，与 skills base_interval 同步）
-            "trap_damage": 4,  # 陷阱伤害/秒
-            "trap_radius_mult": 1.0,  # 陷阱范围倍率
-            "static_overload": 0,  # 静电过载层数（R3 C1）
-            "death_echo": 0,  # 死亡回响层数（R3 C2）
-        }
+    def reset(self, character="default"):
+        """重置所有游戏状态；character 应用角色 stats 覆盖（R5）"""
+        self.character = character
+        char = CHARACTERS.get(character, CHARACTERS["default"])
+        delta = char["stats_delta"]
+
+        self.stats = self.get_default_stats()
+        # 角色数值覆盖：stats_delta 中的键绝对覆盖默认值
+        for k, v in delta.items():
+            if k in self.stats:
+                self.stats[k] = v
         self.acquired_skills = []
         self.spawn_timer = 0.0
         self.fire_timer = 0.0
@@ -56,9 +35,10 @@ class GameState:
         self.chosen_skills = None
         self.elapsed_time = 0.0
         self.difficulty_level = 0
-        self.player_hp = PLAYER_MAX_HP
-        self.player_shield = 0
-        self.player_max_shield = 10
+        self.player_hp = self.stats["max_hp"]
+        # R5：护盾为角色专属字段（基准 0/10；坦克 5/15）
+        self.player_shield = delta.get("player_shield", 0)
+        self.player_max_shield = delta.get("player_max_shield", 10)
         self.invincible_timer = 1.5
         self.menu = True
         self.game_over = False
@@ -72,8 +52,8 @@ class GameState:
         self.boss_warning_timer = 0.0
         # 测试模式控制
         self.test_xp_multiplier = 1.0  # 经验倍率（设为0可禁止经验获取）
-        self.test_custom_hp = PLAYER_MAX_HP      # 测试血量设置
-        self.test_custom_max_hp = PLAYER_MAX_HP   # 测试血量上限设置
+        self.test_custom_hp = self.stats["max_hp"]      # 测试血量设置
+        self.test_custom_max_hp = self.stats["max_hp"]   # 测试血量上限设置
 
     def apply_skill_update(self, skill, player, blade_mgr=None):
         """应用技能后更新相关状态"""

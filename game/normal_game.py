@@ -34,7 +34,7 @@ from entities import HealthPack, ShieldPickup
 from entities.boss import Boss, BossProjectile, AreaEffect, GravityWell, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
 from effects.juice import EffectManager
-from systems import Camera, AudioManager, load_high_score, save_high_score
+from systems import Camera, AudioManager, load_high_score, save_high_score, record_run_result
 from systems.lighting import LightingSystem
 from systems.map_manager import MapManager, MAP_CONFIGS
 from skills import get_random_skills, apply_skill
@@ -48,12 +48,13 @@ from i18n import t
 class NormalGame:
     """正常游戏模式主类"""
 
-    def __init__(self):
+    def __init__(self, character="default"):
         pygame.init()
         pygame.key.stop_text_input()
         pygame.event.set_blocked(pygame.TEXTINPUT)
         pygame.event.set_blocked(pygame.TEXTEDITING)
 
+        self.character = character
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(t("window_caption"))
         self.clock = pygame.time.Clock()
@@ -76,7 +77,7 @@ class NormalGame:
     def _init_game(self):
         """初始化游戏实体"""
         self.game_state = self._create_game_state()
-        self.player = Player()
+        self.player = Player(self.game_state.character)
         self.camera = Camera()
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
@@ -101,11 +102,14 @@ class NormalGame:
         self._boss_fight_timer = 0.0     # Boss 战已进行时长（用于 45s 增援波）
         self._last_reinforce_time = 0.0  # 上次增援波时间戳
         self._surge_timer = 0.0          # 终局冲锋包围波计时
+        # R5 统计（结算一次性写入 meta，防频繁 I/O）
+        self.run_kills = 0               # 本局普通击杀
+        self.run_boss_kills = 0          # 本局 Boss 击杀
 
     def _create_game_state(self):
         """创建游戏状态"""
         from game.state import GameState
-        state = GameState()
+        state = GameState(self.character)
         state.menu = False
         state.test_mode = False
         return state
@@ -212,7 +216,7 @@ class NormalGame:
     def _apply_skill(self, skill):
         """应用技能"""
         self.audio.play_ui_click()
-        apply_skill(self.game_state.stats, skill)
+        apply_skill(self.game_state.stats, skill, self.game_state.character)
         self.game_state.apply_skill_update(skill, self.player, self.blade_mgr)
         self.game_state.chosen_skills = None
         self.game_state.paused = False
@@ -777,6 +781,7 @@ class NormalGame:
         self.audio.play_enemy_death()
         self.game_state.score += 1
         self.game_state.experience += xp_gained
+        self.run_kills += 1  # R5：本局普通击杀统计
         self._maybe_drop_item(enemy)
         # R3 §4.4 C2 死亡回响：击杀精英时引爆周围敌人
         if enemy.is_elite:
@@ -895,13 +900,22 @@ class NormalGame:
         return result
 
     def _trigger_game_over(self, is_victory):
-        """统一进入结算：置 game_over 并保存最高分。"""
+        """统一进入结算：置 game_over、保存最高分、写入 meta 统计。"""
         self.game_state.game_over = True
         self.game_over = True
         self.is_victory = is_victory
         self.new_record = save_high_score(self.game_state.score)
         if self.new_record:
             self.high_score = self.game_state.score
+        # R5：结算一次性写入 meta（含自动解锁刷新，重启保留）
+        record_run_result(
+            self.game_state.character,
+            kills=self.run_kills,
+            boss_kills=self.run_boss_kills,
+            score=self.game_state.score,
+            elapsed=self.game_state.elapsed_time,
+            victory=is_victory,
+        )
 
     def _check_game_end(self):
         """检查游戏结束：死亡，或存活满 GAME_DURATION_SECONDS 胜利。"""
@@ -1177,6 +1191,7 @@ class NormalGame:
         self.game_state.score += 50
         # R3 §4.4 C2 死亡回响：击杀 Boss 引爆周围敌人
         self._trigger_death_echo(boss.rect.centerx, boss.rect.centery)
+        self.run_boss_kills += 1  # R5：本局 Boss 击杀统计
         boss.kill()
         self.bosses.remove(boss)
         self.game_state.boss_active = False

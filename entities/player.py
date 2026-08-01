@@ -4,16 +4,20 @@ from entities.animation import Animation
 from entities.walk_anim import compute_walk_frame, resolve_params
 from effects.asset_loader import load_image
 from ui.render_helpers import draw_ground_shadow
+from characters import CHARACTERS
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, character="default"):
         frames = load_image("player", WHITE, PLAYER_SIZE, animated=True)
         self.anim = Animation(frames, frame_duration=0.1)
         self.rect = pygame.Rect(0, 0, PLAYER_SIZE, PLAYER_SIZE)
         self.rect.center = (MAP_WIDTH // 2, MAP_HEIGHT // 2)
-        self.speed = PLAYER_SPEED
-        self.max_hp = PLAYER_MAX_HP  # 血量上限
+        # R5：角色初始速度/血量上限（stats_delta 覆盖）
+        delta = CHARACTERS.get(character, CHARACTERS["default"])["stats_delta"]
+        self.character = character
+        self.speed = delta.get("player_speed", PLAYER_SPEED)
+        self.max_hp = delta.get("max_hp", PLAYER_MAX_HP)  # 血量上限
         self._was_moving = False
         self._tilt = 0.0  # 移动时的身体倾斜角（土豆兄弟式动态）
         self.vx = 0.0     # 水平速度（px/s，L1 程序动画 flip 用）

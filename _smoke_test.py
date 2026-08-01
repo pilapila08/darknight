@@ -150,6 +150,38 @@ def t_start_screen():
         draw_start_screen(screen, get_font(64), get_font(28), get_font(18))
 
 
+# --- R5 角色系统 ---
+def t_character_select():
+    from ui.character_select import (
+        draw_character_select, build_character_select_layout,
+        handle_character_select_input,
+    )
+    from ui.drawables import get_font
+    from characters import CHARACTERS
+    from game.state import GameState
+    # 四角色数值覆盖可实例化
+    assert set(CHARACTERS.keys()) == {"default", "gunslinger", "vanguard", "wayfarer"}
+    GameState("gunslinger"); GameState("vanguard"); GameState("wayfarer")
+    meta = {"total_kills": 100, "victories": 2, "high_score": 500, "total_runs": 3,
+            "best_run_kills": 60}
+    unlocks = {"gunslinger": True, "vanguard": False, "wayfarer": False}
+    card_rects, start_btn, back_btn = build_character_select_layout(SCREEN_WIDTH, SCREEN_HEIGHT)
+    for _ in range(3):
+        draw_character_select(screen, get_font(48), get_font(24), get_font(14),
+                              "gunslinger", meta, unlocks, card_rects, start_btn, back_btn)
+    ev = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHT})
+    # 解锁顺序仅 [default, gunslinger]（vanguard/wayfarer 锁定）→ 右移选中 gunslinger
+    assert handle_character_select_input(ev, card_rects, start_btn, back_btn,
+                                         "default", unlocks) == "select:gunslinger"
+    # 从 gunslinger 右移回绕到 default
+    assert handle_character_select_input(ev, card_rects, start_btn, back_btn,
+                                         "gunslinger", unlocks) == "select:default"
+    # 数字键 1-4：锁定角色不可选中
+    ev2 = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_3})
+    assert handle_character_select_input(ev2, card_rects, start_btn, back_btn,
+                                         "default", unlocks) is None
+
+
 # --- 主游戏多帧模拟 ---
 def t_normal_game():
     from game.normal_game import NormalGame
@@ -221,6 +253,7 @@ check("ui/skill_select", t_skill_select)
 check("ui/boss_hud", t_boss_hud)
 check("ui/game_over", t_game_over)
 check("ui/start_screen", t_start_screen)
+check("r5/character_select", t_character_select)
 check("game/normal_game 10帧模拟", t_normal_game)
 check("entities/walk_anim L1程序动画", t_walk_anim)
 

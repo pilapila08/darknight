@@ -24,7 +24,7 @@ from entities import Particle, DamageNumber, Explosion, TrapManager
 from entities import HealthPack, ShieldPickup
 from entities.boss import Boss, BossProjectile, AreaEffect, BOSS_CLASSES, BOSS_CONFIGS, BoomerangFist
 from effects import OrbitalBladeManager, ChainLightning
-from systems import Camera, AudioManager, load_high_score, save_high_score
+from systems import Camera, AudioManager, load_high_score, save_high_score, record_run_result
 from systems.map_manager import MapManager, MAP_CONFIGS
 from skills import SKILL_POOL, apply_skill
 from ui import (
@@ -43,12 +43,13 @@ from i18n import t
 class TestGame:
     """测试游戏模式主类"""
 
-    def __init__(self):
+    def __init__(self, character="default"):
         pygame.init()
         pygame.key.stop_text_input()
         pygame.event.set_blocked(pygame.TEXTINPUT)
         pygame.event.set_blocked(pygame.TEXTEDITING)
 
+        self.character = character
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(t("window_caption_test"))
         self.clock = pygame.time.Clock()
@@ -73,7 +74,7 @@ class TestGame:
         """初始化游戏实体"""
         self.game_state = self._create_game_state()
         self.test_handler = TestModeHandler()
-        self.player = Player()
+        self.player = Player(self.game_state.character)
         self.camera = Camera()
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
@@ -100,6 +101,9 @@ class TestGame:
         self.game_state.test_custom_hp = PLAYER_MAX_HP
         self.game_state.test_custom_max_hp = PLAYER_MAX_HP
         self.game_state.test_custom_damage = 1  # 自定义敌人伤害
+        # R5 统计（结算一次性写入 meta）
+        self.run_kills = 0
+        self.run_boss_kills = 0
         self.debug_stats_enabled = False  # 调试数值显示开关
         self.enemy_panel_expanded = False  # 敌人生成面板是否展开
         self.boss_panel_expanded = False  # Boss测试面板是否展开
@@ -108,7 +112,7 @@ class TestGame:
 
     def _create_game_state(self):
         """创建游戏状态"""
-        state = GameState()
+        state = GameState(self.character)
         state.menu = False
         state.test_mode = True
         return state
@@ -331,7 +335,9 @@ class TestGame:
         skill_rects = get_test_skill_rects(SCREEN_WIDTH, SCREEN_HEIGHT)
         for i, skill in enumerate(SKILL_POOL):
             if skill_rects[i].collidepoint(pos):
-                self.test_handler.handle_skill_click(skill, self.game_state.stats, self.player, self.blade_mgr)
+                self.test_handler.handle_skill_click(
+                    skill, self.game_state.stats, self.player, self.blade_mgr,
+                    character=self.game_state.character)
                 self.game_state.acquired_skills.append(skill["name"])
                 break
 
@@ -380,7 +386,7 @@ class TestGame:
 
     def _apply_skill(self, skill):
         """应用技能"""
-        apply_skill(self.game_state.stats, skill)
+        apply_skill(self.game_state.stats, skill, self.game_state.character)
         self.game_state.apply_skill_update(skill, self.player, self.blade_mgr)
         self.game_state.chosen_skills = None
         self.game_state.paused = False
@@ -806,6 +812,7 @@ class TestGame:
         self.audio.play_enemy_death()
         self.game_state.score += 1
         self.game_state.experience += xp_gained
+        self.run_kills += 1  # R5：本局普通击杀统计
         self._maybe_drop_item(enemy)
         enemy.kill()
 
@@ -904,13 +911,22 @@ class TestGame:
         return original_get_random_skills(count, self.game_state.stats)
 
     def _trigger_game_over(self, is_victory):
-        """统一进入结算：置 game_over 并保存最高分。"""
+        """统一进入结算：置 game_over、保存最高分、写入 meta 统计。"""
         self.game_state.game_over = True
         self.game_over = True
         self.is_victory = is_victory
         self.new_record = save_high_score(self.game_state.score)
         if self.new_record:
             self.high_score = self.game_state.score
+        # R5：结算一次性写入 meta（含自动解锁刷新，重启保留）
+        record_run_result(
+            self.game_state.character,
+            kills=self.run_kills,
+            boss_kills=self.run_boss_kills,
+            score=self.game_state.score,
+            elapsed=self.game_state.elapsed_time,
+            victory=is_victory,
+        )
 
     def _check_game_end(self):
         """检查游戏结束：死亡，或存活满 GAME_DURATION_SECONDS 胜利。"""
@@ -1148,6 +1164,7 @@ class TestGame:
         greedy_mult = 1.0 + 0.15 * greedy_count
         self.game_state.experience += int(20 * greedy_mult * self.game_state.test_xp_multiplier)
         self.game_state.score += 50
+        self.run_boss_kills += 1  # R5：本局 Boss 击杀统计
         boss.kill()
         self.bosses.remove(boss)
         self.game_state.boss_active = False

@@ -4,6 +4,7 @@ from settings import (
     REGEN_KILLS_INITIAL, MAX_BULLET_SPEED_MULT, SKILL_DEFS,
     STATIC_OVERLOAD_CD_REDUCTION, DEATH_ECHO_RADIUS, DEATH_ECHO_DAMAGE,
 )
+from characters import CHARACTERS
 
 # R3：技能数值唯一源 = settings.SKILL_DEFS（playability-pack-v1.md §1.2）
 _NOVA = SKILL_DEFS["nova"]
@@ -476,8 +477,20 @@ def get_random_skills(n=3, stats=None):
     return random.sample(available, min(n, len(available)))
 
 
-def apply_skill(stats, skill):
+def apply_skill(stats, skill, character=None):
+    """应用技能到 stats；character 非 None 时应用角色专属被动乘区（R5）。
+
+    - character=None：行为与 R3 完全一致（默认角色，无被动放大）。
+    - 被动钩子（characters.CHARACTERS[*].passive）：
+        火枪手 bullet_damage_growth_mult   火力增强等差成长 ×1.5
+        坦克   damage_taken_factor_mult     钢铁意志每层 ×0.97
+        游侠   fire_interval_factor         急速射击乘区 0.85→0.78
+               player_speed_factor_mult     凌波微步每层额外 ×1.03
+    """
     key = skill["key"]
+    passive = {}
+    if character:
+        passive = CHARACTERS.get(character, {}).get("passive", {}) or {}
 
     # 等差数列技能（子弹伤害）
     if skill.get("is_arithmetic"):
@@ -492,6 +505,8 @@ def apply_skill(stats, skill):
             growth = k * k
         else:
             growth = k * (k + 1)
+        # R5 火枪手·火药专家：等差成长 ×1.5
+        growth *= passive.get("bullet_damage_growth_mult", 1.0)
         stats[key] = base + growth
     # 暗影新星
     elif key == "has_blades":
@@ -591,7 +606,15 @@ def apply_skill(stats, skill):
             stats[key] += skill["delta"]
     # factor技能
     elif "factor" in skill:
-        stats[key] *= skill["factor"]
+        factor = skill["factor"]
+        # R5 专属被动乘区
+        if key == "fire_interval":
+            factor = passive.get("fire_interval_factor", factor)      # 游侠·疾风连射 0.78
+        elif key == "player_speed":
+            factor *= passive.get("player_speed_factor_mult", 1.0)    # 游侠·灵动身法 +3%/层
+        elif key == "damage_taken":
+            factor *= passive.get("damage_taken_factor_mult", 1.0)    # 坦克·钢铁壁垒 ×0.97/层
+        stats[key] *= factor
         if "min_value" in skill:
             stats[key] = max(skill["min_value"], stats[key])
 
