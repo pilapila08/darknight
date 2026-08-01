@@ -35,7 +35,7 @@ from entities.boss import Boss, BossProjectile, AreaEffect, GravityWell, BOSS_CL
 from effects import OrbitalBladeManager, ChainLightning
 from effects.juice import EffectManager
 from systems import Camera, AudioManager, load_high_score, save_high_score, record_run_result
-from systems.lighting import LightingSystem
+from systems.lighting import LightingSystem, PLAYER_LIGHT_RADIUS, PLAYER_LIGHT_COLOR
 from systems.map_manager import MapManager, MAP_CONFIGS
 from skills import get_random_skills, apply_skill
 from ui import draw_hud, draw_skill_bar, draw_game_over_screen, draw_skill_selection, draw_pause_menu, get_font
@@ -1046,7 +1046,8 @@ class NormalGame:
         """登记本帧所有光源（玩家/子弹/经验球/爆炸/Boss等）"""
         L = self.lighting
         px, py = self.player.rect.center
-        L.add_light(px, py, 330, (255, 238, 198))
+        # QOL 调亮：玩家光源半径 330→400（集中常量见 lighting.PLAYER_LIGHT_RADIUS）
+        L.add_light(px, py, PLAYER_LIGHT_RADIUS, PLAYER_LIGHT_COLOR)
         for bullet in self.bullets:
             L.add_light(bullet.rect.centerx, bullet.rect.centery, 55, (150, 195, 255), 0.85)
         for eb in self.enemy_bullets:

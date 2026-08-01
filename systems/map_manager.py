@@ -1,11 +1,29 @@
 """Map system: background colors, grid styles, and unique mechanics per map."""
 import math
+import os
 import random
+import sys
 import pygame
 from settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT, GRID_SIZE,
     BLACK, GRAY
 )
+
+
+def _resource_path(relative_path):
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, relative_path)
+
+
+# AI 生成的地面纹理（256×256 像素化瓦片，已去水印，用户确认接入）
+GROUND_TEXTURE_DIR = _resource_path(os.path.join("assets", "maps"))
+GROUND_TEXTURE_FILES = [
+    "bleak_graveyard_256.png",     # 0 荒芜墓地
+    "corrupted_swamp_256.png",     # 1 腐化沼泽
+    "shadow_court_256.png",        # 2 暗影庭院
+    "iron_ruins_256.png",          # 3 钢铁废墟
+    "void_rift_256.png",           # 4 虚空裂缝
+]
 
 
 MAP_CONFIGS = [
@@ -91,6 +109,7 @@ class MapManager:
         self._vignette = None
         self._ground_chunk = None
         self._ground_map_index = -1
+        self._ground_textures = self._preload_ground_textures()
         self._generate_scenery()
 
     def switch_to_map(self, map_index):
@@ -274,8 +293,57 @@ class MapManager:
                 return x, y
         return cx + random.randint(-200, 200), cy + random.randint(-200, 200)
 
+    def _preload_ground_textures(self):
+        """预加载 5 张地图地面纹理；加载失败项置 None（该图回退程序化棋盘格）。"""
+        textures = {}
+        for idx, fname in enumerate(GROUND_TEXTURE_FILES):
+            tex = None
+            path = os.path.join(GROUND_TEXTURE_DIR, fname)
+            if os.path.isfile(path):
+                try:
+                    surf = pygame.image.load(path)
+                    if pygame.display.get_surface() is not None:
+                        surf = surf.convert()
+                    tex = surf
+                except Exception:
+                    tex = None
+            textures[idx] = tex
+        return textures
+
     def _build_ground_chunk(self):
-        """预渲染一块可平铺的地面纹理：双色棋盘格 + 细微斑点（土豆兄弟式干净地板）。"""
+        """预渲染整张地图地面（3000×2250）：优先 AI 纹理 256px 瓦片交错平铺，缺失回退棋盘格。
+
+        保持"预渲染一张大地块、每帧整体 blit 一次"的性能策略（pygame 自动按屏幕裁剪），
+        避免每帧逐瓦片 blit。纹理路径采用交错平铺：奇数行右移半瓦片（128px，负起点取模
+        处理左边界），配合 make_seamless 边缘融合破坏直线接缝；回退路径同样平铺出整张地图，
+        保证两种方案绘制结果一致。
+        """
+        chunk = pygame.Surface((MAP_WIDTH, MAP_HEIGHT))
+        tex = self._ground_textures.get(self.current_map_index)
+        if tex is not None:
+            tw, th = tex.get_size()
+            half = tw // 2
+            row = 0
+            y = 0
+            while y < MAP_HEIGHT:
+                offset = half if row % 2 == 1 else 0
+                x = -offset
+                while x < MAP_WIDTH:
+                    chunk.blit(tex, (x, y))
+                    x += tw
+                y += th
+                row += 1
+            return chunk
+        # 回退：程序化棋盘格小地块 → 平铺整张地图（保持对齐，棋盘格本身无直线接缝）
+        tile = self._build_procedural_chunk()
+        tw, th = tile.get_size()
+        for y in range(0, MAP_HEIGHT, th):
+            for x in range(0, MAP_WIDTH, tw):
+                chunk.blit(tile, (x, y))
+        return chunk
+
+    def _build_procedural_chunk(self):
+        """回退方案：双色棋盘格 + 细微斑点（土豆兄弟式干净地板，原逻辑保留）。"""
         gs = GRID_SIZE
         cells = 8
         chunk = pygame.Surface((gs * cells, gs * cells))
@@ -305,14 +373,9 @@ class MapManager:
             self._ground_chunk = self._build_ground_chunk()
             self._ground_map_index = self.current_map_index
 
-        # 平铺地面纹理
-        chunk = self._ground_chunk
-        cw, ch = chunk.get_size()
-        off_x = int(camera.offset.x) % cw
-        off_y = int(camera.offset.y) % ch
-        for x in range(-off_x, SCREEN_WIDTH, cw):
-            for y in range(-off_y, SCREEN_HEIGHT, ch):
-                screen.blit(chunk, (x, y))
+        # 整体 blit 预渲染大地块（相机裁剪由 pygame 处理，单次 blit 覆盖可见区）
+        screen.blit(self._ground_chunk,
+                    (-int(camera.offset.x), -int(camera.offset.y)))
 
         self._draw_arena_border(screen, camera)
         self._draw_scenery(screen, camera)
@@ -374,11 +437,12 @@ class MapManager:
                 pygame.draw.arc(screen, glow, pos, math.pi, math.pi * 1.65, 2)
 
     def _draw_vignette(self, screen):
+        """暗角：QOL 调亮后弱化（alpha 70→45，范围 160→220，过渡更柔和）。"""
         if self._vignette is None:
             self._vignette = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            edge = 160
+            edge = 220
             for i in range(edge):
-                alpha = int(70 * (1 - i / edge) ** 2)
+                alpha = int(45 * (1 - i / edge) ** 2)
                 pygame.draw.line(self._vignette, (0, 0, 0, alpha), (0, i), (SCREEN_WIDTH, i))
                 pygame.draw.line(self._vignette, (0, 0, 0, alpha),
                                  (0, SCREEN_HEIGHT - 1 - i), (SCREEN_WIDTH, SCREEN_HEIGHT - 1 - i))

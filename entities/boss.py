@@ -23,10 +23,9 @@ from settings import (
     VOID_LORD_ENRAGE_THRESHOLD, VOID_LORD_VOIDLING_HP, VOID_LORD_VOIDLING_DAMAGE,
     BOSS_1_TIME, BOSS_2_TIME, BOSS_3_TIME, BOSS_4_TIME,
     ENEMY_BULLET_SPEED,
+    BOSS_RING_SCALE, ENEMY_RING_ALPHA,
 )
 from .enemy import Enemy
-from entities.walk_anim import compute_walk_frame, resolve_params
-from ui.render_helpers import draw_shadowed_sprite_offset
 
 
 class BossProjectile(pygame.sprite.Sprite):
@@ -210,14 +209,10 @@ class Boss(Enemy):
         return attacks
 
     def draw(self, screen, camera):
-        # L1 程序动画：低频大振幅（沉重感）+ 脚底阴影联动
-        t = pygame.time.get_ticks() / 1000.0
-        params = resolve_params("boss")
-        frame = compute_walk_frame(self.image, t, id(self), self.vx, params)
-        draw_shadowed_sprite_offset(screen, camera, frame.surface, self.rect,
-                                    dy=frame.bob,
-                                    shadow_scale=1.35 * frame.shadow_scale,
-                                    shadow_alpha=125)
+        # L1 程序动画（低频大振幅沉重感）+ 更大更亮的脚底光圈 + 轮廓光
+        self._draw_animated(screen, camera, "boss", shadow_scale=1.35,
+                            shadow_alpha=125, ring_scale=BOSS_RING_SCALE,
+                            ring_alpha=min(255, ENEMY_RING_ALPHA + 25))
 
     def _do_attacks(self, dt, player_rect):
         return []

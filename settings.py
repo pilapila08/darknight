@@ -217,6 +217,16 @@ VOID_LORD_VOIDLING_DAMAGE = 20
 # ---- Map System ----
 MAP_TRANSITION_DURATION = 2.0
 
+# ---- 敌人可见性增强（DN-ENG-VIS-01）----
+ENEMY_GLOW_COLOR = (255, 200, 80)   # 敌人轮廓光暖色
+ENEMY_GLOW_WIDTH = 2                 # 轮廓光 mask 膨胀宽度（px）
+ENEMY_GLOW_ALPHA = 70                # 轮廓光 alpha（建议 60-90）
+ENEMY_RING_COLOR = (255, 80, 60)     # 脚底危险光圈红橙
+ENEMY_RING_ALPHA = 55                # 脚底光圈 alpha（建议 40-70）
+BOSS_RING_SCALE = 1.6                # Boss 光圈半径放大系数（更大更亮）
+EXPLODER_RING_COLOR = (255, 60, 60)  # 自爆怪爆炸范围光圈（红）
+EXPLODER_RING_ALPHA = 85             # 自爆怪光圈基础 alpha（脉冲增强）
+
 # ---- L1 程序动画（正弦 bob + 水平挤压 + 朝向 flip + 脚底阴影联动）----
 # 依据 design/art/animation-params-v1.md（美术方向）；bob 半波 (1-cos)/2：
 # phase=0 触地（dy=0，脚贴阴影），phase=π 最高点（dy=-amp，负=向上）。

@@ -9,3 +9,6 @@ build/
 
 # AI 生成设计参考（含水印，不入库）
 design/art/ai-samples/
+
+# 地图纹理原图备份（中间产物）
+assets/maps/_backup_orig/

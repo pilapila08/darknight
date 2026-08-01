@@ -3,18 +3,29 @@
 原理：维护一张与屏幕等大的 darkness 表面，先填充环境色（偏暗偏冷），
 再把径向渐变的光源贴图以加法混合画上去，最后把 darkness 以乘法混合
 叠加到画面上——光源处画面保持原亮度，其余区域被压暗降温。
+
+R5/QOL 调亮：提升各图环境光基准值（"暗但不黑"），保留 5 图色调差异；
+LIGHT_AMBIENT_BRIGHTNESS 为全局亮度倍率（集中可调，默认 1.0 = 中性）。
 """
 import pygame
 from settings import SCREEN_WIDTH, SCREEN_HEIGHT
 
-# 各地图的环境光颜色（值越低越暗；分量差异形成色调）
+# 各地图的环境光颜色（值越低越暗；分量差异形成色调）。
+# QOL 调亮：原 100-128 区间 → 140-180 区间（墓地最亮到虚空最暗的梯度仍保留）。
 AMBIENT_BY_MAP = [
-    (110, 118, 132),   # 荒芜墓地：冷灰蓝
-    (104, 124, 102),   # 腐化沼泽：阴绿
-    (112, 96, 134),    # 暗影庭院：暗紫
-    (128, 114, 100),   # 钢铁废墟：锈棕
-    (100, 84, 126),    # 虚空裂缝：深紫
+    (160, 168, 182),   # 荒芜墓地：冷灰蓝（最亮）
+    (152, 172, 150),   # 腐化沼泽：阴绿
+    (160, 146, 184),   # 暗影庭院：暗紫
+    (176, 162, 148),   # 钢铁废墟：锈棕（最亮暖色）
+    (148, 140, 168),   # 虚空裂缝：深紫（最暗，保留虚空压迫感）
 ]
+
+# 全局环境光亮度倍率：>1 整体调亮，<1 整体调暗（集中可调，默认中性）
+LIGHT_AMBIENT_BRIGHTNESS = 1.0
+
+# 玩家光源基础半径（正常模式 _submit_lights 引用，便于集中调参）
+PLAYER_LIGHT_RADIUS = 400
+PLAYER_LIGHT_COLOR = (255, 238, 198)
 
 _GRADIENT_SIZE = 256
 
@@ -69,7 +80,11 @@ class LightingSystem:
         if not self.enabled:
             self._lights.clear()
             return
-        self.darkness.fill(self.ambient)
+        ambient = self.ambient
+        if LIGHT_AMBIENT_BRIGHTNESS != 1.0:
+            ambient = tuple(
+                max(0, min(255, int(c * LIGHT_AMBIENT_BRIGHTNESS))) for c in ambient)
+        self.darkness.fill(ambient)
         for wx, wy, radius, color, intensity in self._lights:
             sx = wx - camera.offset.x
             sy = wy - camera.offset.y

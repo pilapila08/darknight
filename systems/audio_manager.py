@@ -76,33 +76,55 @@ def _envelope_at(index, count, attack=0.005, release=None):
 
 
 def _generate_shoot(pitch=1.0):
-    dur = 0.04
+    """射击音（QOL 升级）：噪声扫频 + 快速衰减包络，质感更接近"枪声"。
+
+    - 主体：白噪声经一阶低通，截止从亮快速扫向闷（模拟枪膛气压瞬态→尾音）
+    - 起始：低频瞬态"噗"（150Hz 快速衰减，给击发以重量）
+    - 残余：微量扫频正弦（900→120Hz 下滑），保留"枪膛感"
+    """
+    dur = 0.07
     count = int(SAMPLE_RATE * dur)
-    noise_count = int(SAMPLE_RATE * 0.005)
     samples = []
+    lp = 0.0
     for i in range(count):
         t = i / SAMPLE_RATE
-        env = _envelope_at(i, count, attack=0.002, release=0.02)
-        value = math.sin(2 * math.pi * 800 * pitch * t) * env
-        value += math.sin(2 * math.pi * 1200 * pitch * t) * env * 0.3
-        if i < noise_count:
-            value += random.uniform(-1, 1) * 0.2 * (1 - i / noise_count)
-        samples.append(value * 0.55)
+        # 快速指数衰减（主体 ~35ms 内衰减殆尽）
+        decay = math.exp(-t * 42)
+        # 一阶低通：起始明亮（alpha 高），快速变闷
+        cutoff_alpha = 0.22 + 0.62 * math.exp(-t * 95)
+        noise = random.uniform(-1, 1)
+        lp += cutoff_alpha * (noise - lp)
+        value = lp * decay
+        # 起始低频瞬态（击发"噗"）
+        if t < 0.014:
+            thump = math.sin(2 * math.pi * 150 * pitch * t) * (1 - t / 0.014)
+            value += thump * 0.6
+        # 扫频正弦残余（高→低，枪膛感）
+        sweep_freq = 900 * pitch * math.exp(-t * 40) + 120
+        value += math.sin(2 * math.pi * sweep_freq * t) * decay * 0.16
+        samples.append(value * 0.8)
     return _make_sound(samples)
 
 
 def _generate_hit(pitch=1.0):
-    """命中音：短促的中频噼啪。"""
-    dur = 0.05
+    """命中音（QOL 升级）：增强低频分量，更"肉"更实，与 shoot 区分。
+
+    - 中频噼啪：420Hz 快速下滑正弦（原主体，保留）
+    - 低频瞬态：130Hz 快速衰减（受击"肉"感，新增）
+    - 噪声：短促爆裂
+    """
+    dur = 0.06
     count = int(SAMPLE_RATE * dur)
     samples = []
     freq = 420 * pitch
     for i in range(count):
         t = i / SAMPLE_RATE
-        env = _envelope_at(i, count, attack=0.001, release=0.04)
-        value = math.sin(2 * math.pi * freq * t * (1 - t * 4)) * env * 0.7
-        value += random.uniform(-1, 1) * env * 0.35
-        samples.append(value * 0.5)
+        env = _envelope_at(i, count, attack=0.001, release=0.05)
+        value = math.sin(2 * math.pi * freq * t * (1 - t * 4)) * env * 0.4
+        # 低频瞬态（受击"肉"感）
+        value += math.sin(2 * math.pi * 130 * pitch * t) * math.exp(-t * 38) * 0.55
+        value += random.uniform(-1, 1) * env * 0.3
+        samples.append(value * 0.6)
     return _make_sound(samples)
 
 
@@ -127,32 +149,50 @@ def _generate_death_variants(count=5):
 
 
 def _generate_explosion():
-    """爆炸：低频轰鸣 + 大量噪声，指数衰减。"""
-    dur = 0.45
+    """爆炸（QOL 升级）：增强低频分量。
+
+    - 次低频 sub 30Hz（新增，加重"震感"）
+    - 低频轰鸣 55+38Hz（保留）
+    - 噪声经一阶低通 → 更"闷"更重的隆隆声
+    """
+    dur = 0.5
     count = int(SAMPLE_RATE * dur)
     samples = []
+    lp = 0.0
     for i in range(count):
         t = i / SAMPLE_RATE
-        decay = math.exp(-t * 8)
-        value = math.sin(2 * math.pi * 55 * t) * decay * 0.8
-        value += math.sin(2 * math.pi * 38 * t) * decay * 0.6
-        value += random.uniform(-1, 1) * decay * 0.7
-        samples.append(value * 0.7)
+        decay = math.exp(-t * 7)
+        value = math.sin(2 * math.pi * 55 * t) * decay * 0.6
+        value += math.sin(2 * math.pi * 38 * t) * decay * 0.45
+        value += math.sin(2 * math.pi * 30 * t) * decay * 0.4  # 新增 sub
+        # 低通噪声隆隆声
+        noise = random.uniform(-1, 1)
+        lp += 0.18 * (noise - lp)
+        value += lp * decay * 0.5
+        samples.append(value * 0.6)
     return _make_sound(samples)
 
 
 def _generate_pickup():
-    """拾取：两个快速上行音。"""
+    """拾取（QOL 升级）：两音上行 + 谐波层 + 起音噪声颗粒。
+
+    - 基频 660→990 两音（保留），谐波层 2/3 次泛音加厚（原仅 0.2×2nd）
+    - 起音 3ms 噪声颗粒 → 更"颗粒感"，与 level_up 的"宏亮琶音"区分
+    """
     notes = [660, 990]
-    note_dur = 0.05
+    note_dur = 0.055
     samples = []
     note_count = int(SAMPLE_RATE * note_dur)
+    grain_n = int(SAMPLE_RATE * 0.003)
     for freq in notes:
         for i in range(note_count):
             t = i / SAMPLE_RATE
-            env = _envelope_at(i, note_count, attack=0.004, release=0.03)
+            env = _envelope_at(i, note_count, attack=0.003, release=0.035)
             value = math.sin(2 * math.pi * freq * t) * env
-            value += math.sin(2 * math.pi * freq * 2 * t) * env * 0.2
+            value += math.sin(2 * math.pi * freq * 2 * t) * env * 0.28
+            value += math.sin(2 * math.pi * freq * 3 * t) * env * 0.12
+            if i < grain_n:
+                value += random.uniform(-1, 1) * 0.25 * (1 - i / grain_n)
             samples.append(value * 0.5)
     return _make_sound(samples)
 
@@ -207,16 +247,25 @@ def _generate_boss_death():
 
 
 def _generate_ui_click():
-    """UI确认：干净的短促高音。"""
+    """UI确认（QOL 升级）：短促高音 + 谐波层 + 起音咔哒。
+
+    - 基频 880Hz + 2/3/4 次泛音加厚（原仅 1.5 倍泛音）
+    - 起音 2ms 噪声"咔哒" → 干净但更有实体感
+    """
     dur = 0.07
     count = int(SAMPLE_RATE * dur)
     samples = []
+    tick_n = int(SAMPLE_RATE * 0.002)
     for i in range(count):
         t = i / SAMPLE_RATE
         env = _envelope_at(i, count, attack=0.002, release=0.05)
         value = math.sin(2 * math.pi * 880 * t) * env
         value += math.sin(2 * math.pi * 1320 * t) * env * 0.3
-        samples.append(value * 0.45)
+        value += math.sin(2 * math.pi * 1760 * t) * env * 0.12
+        value += math.sin(2 * math.pi * 2640 * t) * env * 0.06
+        if i < tick_n:
+            value += random.uniform(-1, 1) * 0.2 * (1 - i / tick_n)
+        samples.append(value * 0.5)
     return _make_sound(samples)
 
 
