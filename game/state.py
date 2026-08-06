@@ -104,4 +104,13 @@ class GameState:
             "trap_radius_mult": 1.0,
             "static_overload": 0,
             "death_echo": 0,
+            # C02 新武器（content-pack-v2.md §1）
+            "has_frost": 0,
+            "frost_radius": 100,
+            "frost_damage": 2,
+            "frost_slow": 0.20,
+            "has_flame": 0,
+            "flame_interval": 0.28,
+            "flame_damage": 2,
+            "flame_burn": 1,
         }

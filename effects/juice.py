@@ -2,6 +2,7 @@
 import math
 import random
 import pygame
+from effects.fx_textures import get_muzzle_flash
 
 
 class _DeathGhost:
@@ -85,6 +86,19 @@ class _MuzzleFlash:
         sx = self.x - camera.offset.x
         sy = self.y - camera.offset.y
         r = int(5 + 7 * life)
+
+        # C02 FX（fx-spec-v1.md §5）：优先 blit 星形贴图（旋转至射击方向）
+        fx = get_muzzle_flash()
+        if fx is not None:
+            surf_size = max(4, r * 4)
+            muzzle_scaled = pygame.transform.scale(fx, (surf_size, surf_size))
+            muzzle_scaled.set_alpha(int(230 * life))
+            rotated = pygame.transform.rotate(muzzle_scaled, -math.degrees(self.angle))
+            screen.blit(rotated, (sx - rotated.get_width() // 2, sy - rotated.get_height() // 2),
+                        special_flags=pygame.BLEND_RGBA_ADD)
+            return
+
+        # 回退：程序化星形（原实现）
         surf = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
         c = r * 2
         pygame.draw.circle(surf, (255, 240, 180, int(190 * life)), (c, c), r)

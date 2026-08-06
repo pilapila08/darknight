@@ -1,4 +1,5 @@
 """Boss HP bar rendering."""
+import math
 import pygame
 from settings import WHITE, GOLD, RED, DARK_GRAY
 
@@ -7,7 +8,14 @@ _state = {"boss_id": None, "reveal": 0.0, "ghost": 1.0, "last_ms": 0}
 
 
 def draw_boss_hp_bar(screen, font, boss):
-    """Draw boss name and HP bar at top center of screen."""
+    """Draw boss name and HP bar at top center of screen.
+
+    R7 P0 (C02 §4.1 U3/U4)：
+    - 阶段刻度：50% / 30% 竖线
+    - 血条底色按 Boss 主题色（config.color 深色版）
+    - <30% 红色脉动
+    - 狂暴横幅（boss.enraged 时显示，配合游戏层 audio.duck）
+    """
     sw = screen.get_width()
     bar_width = 400
     bar_height = 22
@@ -33,7 +41,11 @@ def draw_boss_hp_bar(screen, font, boss):
     pygame.draw.rect(screen, (8, 10, 16), bg_rect, border_radius=8)
     pygame.draw.rect(screen, (74, 66, 78), bg_rect, 1, border_radius=8)
     bar_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
-    pygame.draw.rect(screen, (35, 37, 46), bar_rect, border_radius=6)
+
+    # U3 血条底色按 Boss 主题色（深色版）
+    theme = boss.config.get("color", (200, 60, 60))
+    theme_dark = tuple(max(12, int(c * 0.28)) for c in theme)
+    pygame.draw.rect(screen, theme_dark, bar_rect, border_radius=6)
 
     hp_ratio = max(0, boss.hp / boss.max_hp)
     # 登场展开动画：显示比例受 reveal 限制
@@ -50,7 +62,11 @@ def draw_boss_hp_bar(screen, font, boss):
         pygame.draw.rect(screen, (225, 225, 232), ghost_rect, border_radius=6)
 
     fill_width = int(bar_width * shown_ratio)
+    # U3 低血脉动：<30% 红色脉动
     hp_color = RED if hp_ratio < 0.3 else GOLD
+    if hp_ratio < 0.3:
+        pulse = 0.6 + 0.4 * math.sin(now * 0.012)
+        hp_color = tuple(min(255, int(c * pulse)) for c in RED)
     if fill_width > 0:
         fill_rect = pygame.Rect(bar_x, bar_y, fill_width, bar_height)
         pygame.draw.rect(screen, hp_color, fill_rect, border_radius=6)
@@ -60,6 +76,22 @@ def draw_boss_hp_bar(screen, font, boss):
 
     pygame.draw.rect(screen, GOLD, bar_rect, 2, border_radius=6)
 
+    # U3 阶段刻度：50% / 30% 竖线
+    for pct in (0.5, 0.3):
+        x = bar_x + int(bar_width * pct)
+        pygame.draw.line(screen, (10, 10, 14), (x, bar_y), (x, bar_y + bar_height), 2)
+
     hp_text = font.render(str(max(0, int(boss.hp))) + "/" + str(int(boss.max_hp)), True, WHITE)
     hp_rect = hp_text.get_rect(center=(sw // 2, bar_y + bar_height // 2))
     screen.blit(hp_text, hp_rect)
+
+    # U4 狂暴横幅：Boss 进入狂暴（尸王 <50%）时血条下方弹出
+    if getattr(boss, "enraged", False):
+        banner_text = f"{boss.config['name']}狂暴"
+        banner = font.render(banner_text, True, (255, 90, 50))
+        banner_rect = banner.get_rect(center=(sw // 2, bar_y + bar_height + 18))
+        pad = 8
+        bg = pygame.Rect(banner_rect.x - pad, banner_rect.y - 3, banner_rect.w + pad * 2, banner_rect.h + 6)
+        pygame.draw.rect(screen, (40, 8, 6), bg, border_radius=6)
+        pygame.draw.rect(screen, (255, 90, 50), bg, 1, border_radius=6)
+        screen.blit(banner, banner_rect)

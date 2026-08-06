@@ -1,5 +1,6 @@
 import pygame
 from settings import EXPLODER_RADIUS, EXPLODER_DAMAGE, PURPLE
+from effects.fx_textures import get_explosion_fire
 
 
 class Explosion:
@@ -45,6 +46,18 @@ class Explosion:
     def draw(self, screen, camera):
         alpha = int(180 * max(0, 1 - self.elapsed / self.lifetime))
         radius = max(1, int(self.radius))
+        pos = camera.apply(pygame.Rect(self.x, self.y, 0, 0))
+
+        # C02 FX（fx-spec-v1.md §2）：优先 blit 贴图（保留半径+alpha 缩放逻辑）
+        fx = get_explosion_fire()
+        if fx is not None:
+            size = max(4, radius * 2)
+            surf = pygame.transform.scale(fx, (size, size))
+            surf.set_alpha(alpha)
+            screen.blit(surf, (pos.x - radius, pos.y - radius))
+            return
+
+        # 回退：程序化三层圆（原实现）
         surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(surf, (*PURPLE, alpha),
                           (radius, radius), radius)
@@ -52,5 +65,4 @@ class Explosion:
                           (radius, radius), max(1, radius // 2), 2)
         pygame.draw.circle(surf, (*PURPLE, min(255, alpha + 60)),
                           (radius, radius), radius, 2)
-        pos = camera.apply(pygame.Rect(self.x, self.y, 0, 0))
         screen.blit(surf, (pos.x - radius, pos.y - radius))

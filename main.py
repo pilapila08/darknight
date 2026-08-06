@@ -24,6 +24,8 @@ def main():
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption(t("window_caption"))
+    # 启用文本输入事件（TEXTINPUT），否则主菜单密码 yygbc 无法收集 → 测试模式入口不可见
+    pygame.key.start_text_input()
     clock = pygame.time.Clock()
 
     font = get_font(24)

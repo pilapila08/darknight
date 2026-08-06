@@ -14,6 +14,7 @@ from .pause_menu import draw_pause_menu
 from .boss_hud import draw_boss_hp_bar
 from .test_panel import (
     draw_test_mode_panel,
+    build_test_layout,
     get_test_skill_rects,
     get_test_enemy_rects,
     get_test_auto_spawn_rect,

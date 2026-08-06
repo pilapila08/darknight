@@ -11,6 +11,9 @@ _NOVA = SKILL_DEFS["nova"]
 _LIGHTNING = SKILL_DEFS["lightning"]
 _TRAP = SKILL_DEFS["trap"]
 _PIERCE = SKILL_DEFS["pierce"]
+# C02：新武器权威值（content-pack-v2.md §1.2 / §1.3）
+_FROST = SKILL_DEFS["frost"]
+_FLAME = SKILL_DEFS["flame"]
 
 SKILL_POOL = [
     # Combat stats
@@ -130,6 +133,32 @@ SKILL_POOL = [
         "desc": "击杀精英/Boss时，周围200px敌人受12伤害并击退",
         "key": "death_echo",
         "delta": 1,
+    },
+    # C02 新武器（content-pack-v2.md §1，池 14→16）
+    {
+        "name": "凛冬之环",
+        "desc": "以玩家为中心释放冰霜光环，减速并持续伤害光环内敌人",
+        "key": "has_frost",
+        "delta": 1,
+        "base_radius": _FROST["base_radius"],
+        "radius_per_stack": _FROST["radius_per_stack"],
+        "base_damage": _FROST["base_damage"],
+        "damage_per_stack": _FROST["damage_per_stack"],
+        "slow_base": _FROST["slow_base"],
+        "slow_per_stack": _FROST["slow_per_stack"],
+        "slow_max": _FROST["slow_max"],
+    },
+    {
+        "name": "圣焰喷射器",
+        "desc": "向最近敌人方向喷吐锥形火焰，直接伤害并附加燃烧（可暴击）",
+        "key": "has_flame",
+        "delta": 1,
+        "base_interval": _FLAME["base_interval"],
+        "interval_reduction": _FLAME["interval_reduction"],
+        "min_interval": _FLAME["min_interval"],
+        "base_damage": _FLAME["base_damage"],
+        "damage_per_stack": _FLAME["damage_per_stack"],
+        "burn_damage": _FLAME["burn_damage"],
     },
 ]
 
@@ -274,6 +303,28 @@ def get_skill_effect_desc(skill_name, stats, skill_count=1):
         if stats.get(key, 0) == 0:
             return "未激活"
         return f"精英/Boss击杀引爆 {DEATH_ECHO_DAMAGE} 伤 / {DEATH_ECHO_RADIUS}px"
+    elif key == "has_frost":
+        if stats.get(key, 0) == 0:
+            return "未激活"
+        radius = stats.get("frost_radius", skill["base_radius"])
+        dmg = stats.get("frost_damage", skill["base_damage"])
+        slow = stats.get("frost_slow", skill["slow_base"])
+        if skill_count > 1:
+            next_radius = radius + skill["radius_per_stack"]
+            next_dmg = dmg + skill["damage_per_stack"]
+            next_slow = min(skill["slow_max"], slow + skill["slow_per_stack"])
+            return f"半径{radius}→{next_radius} / 伤{dmg}→{next_dmg} / 减速{int(slow*100)}%→{int(next_slow*100)}%"
+        return f"半径{radius} / 伤{dmg} / 减速{int(slow*100)}%"
+    elif key == "has_flame":
+        if stats.get(key, 0) == 0:
+            return "未激活"
+        interval = stats.get("flame_interval", skill["base_interval"])
+        dmg = stats.get("flame_damage", skill["base_damage"])
+        burn = stats.get("flame_burn", skill["burn_damage"])
+        if skill_count > 1:
+            next_interval = max(skill["min_interval"], interval - skill["interval_reduction"])
+            return f"间隔{interval:.2f}s→{next_interval:.2f}s / 伤{dmg}→{dmg+skill['damage_per_stack']:.1f} / 燃{burn}"
+        return f"间隔{interval:.2f}s / 伤{dmg} / 燃{burn}"
     return ""
 
 
@@ -451,6 +502,40 @@ def get_skill_detail_desc(skill_name, stats, acquired_count):
         initial = "下次: 强化回响"
         return skill["desc"], current_str, initial
 
+    elif key == "has_frost":
+        base_radius = skill["base_radius"]
+        base_dmg = skill["base_damage"]
+        base_slow = skill["slow_base"]
+        if is_first:
+            initial = f"激活: 光环{base_radius}px / 伤{base_dmg}/0.5s / 减速{int(base_slow*100)}%"
+        else:
+            current_radius = stats.get("frost_radius", base_radius)
+            current_dmg = stats.get("frost_damage", base_dmg)
+            current_slow = stats.get("frost_slow", base_slow)
+            next_slow = min(skill["slow_max"], current_slow + skill["slow_per_stack"])
+            initial = f"下次: 半径{current_radius+skill['radius_per_stack']} / 伤{current_dmg+skill['damage_per_stack']} / 减速{int(next_slow*100)}%"
+        radius = stats.get("frost_radius", base_radius)
+        dmg = stats.get("frost_damage", base_dmg)
+        slow = stats.get("frost_slow", base_slow)
+        current_str = f"光环{radius}px / 伤{dmg} / 减速{int(slow*100)}%"
+        return skill["desc"], current_str, initial
+
+    elif key == "has_flame":
+        base_interval = skill["base_interval"]
+        base_dmg = skill["base_damage"]
+        if is_first:
+            initial = f"激活: 锥形喷吐 {base_interval:.2f}s / 伤{base_dmg} + 燃烧"
+        else:
+            current_interval = stats.get("flame_interval", base_interval)
+            current_dmg = stats.get("flame_damage", base_dmg)
+            next_interval = max(skill["min_interval"], current_interval - skill["interval_reduction"])
+            initial = f"下次: 间隔{next_interval:.2f}s / 伤{current_dmg+skill['damage_per_stack']:.1f}"
+        interval = stats.get("flame_interval", base_interval)
+        dmg = stats.get("flame_damage", base_dmg)
+        burn = stats.get("flame_burn", skill["burn_damage"])
+        current_str = f"锥形{interval:.2f}s / 伤{dmg} / 燃{burn}"
+        return skill["desc"], current_str, initial
+
     return skill["desc"], "", ""
 
 
@@ -571,6 +656,31 @@ def apply_skill(stats, skill, character=None):
     # 死亡回响（R3 §4.4 C2）
     elif key == "death_echo":
         stats["death_echo"] = stats.get("death_echo", 0) + 1
+    # 凛冬之环（C02 §1.2）
+    elif key == "has_frost":
+        current = stats.get(key, 0)
+        stats[key] = current + 1
+        if current == 0:
+            stats["frost_radius"] = skill["base_radius"]
+            stats["frost_damage"] = skill["base_damage"]
+            stats["frost_slow"] = skill["slow_base"]
+        else:
+            stats["frost_radius"] = stats.get("frost_radius", skill["base_radius"]) + skill["radius_per_stack"]
+            stats["frost_damage"] = stats.get("frost_damage", skill["base_damage"]) + skill["damage_per_stack"]
+            stats["frost_slow"] = min(skill["slow_max"],
+                                      stats.get("frost_slow", skill["slow_base"]) + skill["slow_per_stack"])
+    # 圣焰喷射器（C02 §1.3）
+    elif key == "has_flame":
+        current = stats.get(key, 0)
+        stats[key] = current + 1
+        if current == 0:
+            stats["flame_interval"] = skill["base_interval"]
+            stats["flame_damage"] = skill["base_damage"]
+            stats["flame_burn"] = skill["burn_damage"]
+        else:
+            stats["flame_interval"] = max(skill["min_interval"],
+                                          stats.get("flame_interval", skill["base_interval"]) - skill["interval_reduction"])
+            stats["flame_damage"] = stats.get("flame_damage", skill["base_damage"]) + skill["damage_per_stack"]
     # 致命节奏 - 暴击率和暴击伤害
     elif key == "crit_chance":
         before = stats[key]

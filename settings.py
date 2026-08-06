@@ -59,6 +59,35 @@ EXPLODER_RADIUS = 80   # 缩小自爆范围（原144过大）
 EXPLODER_DAMAGE = 2
 EXPLODER_COLOR = (200, 50, 200)
 
+# ---- 新敌人（C02 §2：fill Boss1→Boss2 窗口 120–240s 的敌种空白）----
+# 怨灵 Wraith（tier4/136s 闪现逼近）
+WRATH_SPEED = 60              # px/s 非闪现期飘移速度
+WRATH_HP = 3
+WRATH_BLINK_INTERVAL = 1.2    # s 闪现间隔
+WRATH_BLINK_DIST_MIN = 150    # px 闪现距离下限
+WRATH_BLINK_DIST_MAX = 220    # px 闪现距离上限
+WRATH_TELEGRAPH = 0.4         # s 落点残影提示期（实体期，可被打）
+WRATH_LAND_PAUSE = 0.5        # s 落地停顿
+WRATH_SIZE = 30
+WRATH_COLOR = (160, 140, 255) # 青紫幽魂
+# 唤魔师 Warlock（tier6/204s 召唤 + 慢速追踪弹）
+WARLOCK_SPEED = 85            # px/s
+WARLOCK_HP = 2                # 脆皮
+WARLOCK_KEEP_DIST = 240       # px 与玩家保持距离（只退不进）
+WARLOCK_SUMMON_INTERVAL = 2.5 # s 召唤间隔
+WARLOCK_SUMMON_COUNT = 1      # 只/波
+WARLOCK_ORB_INTERVAL = 5.0    # s 追踪弹间隔
+WARLOCK_ORB_SPEED = 140       # px/s 慢速追踪
+WARLOCK_ORB_DAMAGE = 1        # 追踪弹基础伤害（+bonus 在生成处加）
+WARLOCK_SIZE = 30
+WARLOCK_COLOR = (200, 80, 60) # 暗红斗篷
+
+# ---- R7 Boss 演出常量（C02 §4 P0：全复用现有 systems）----
+CORPSE_KING_CHARGE_TELEGRAPH = 0.3   # 尸王冲锋前摇（落点黄圈收缩提示）
+CORPSE_KING_ENRAGE_THRESHOLD = 0.5   # 尸王 <50% 狂暴
+CORPSE_KING_ENRAGE_MINION_COUNT = 5  # 狂暴召唤 3→5（4基础+1冲锋混合）
+SHADOW_MAGE_TELEPORT_TELEGRAPH = 0.4 # 暗影巫师传送落点提示期
+
 # Enemy Bullet
 ENEMY_BULLET_RADIUS = 4
 ENEMY_BULLET_SPEED = 180
@@ -283,5 +312,29 @@ SKILL_DEFS = {
         "factor": 1.5,
         "damage_mult": 0.85,
         "max_pierce": 3,
+    },
+    # 凛冬之环（C02 §1.2：贴身减速 AOE，独立伤害键，不读 bullet_damage/fire_interval）
+    "frost": {
+        "base_radius": 100,        # px 光环半径
+        "radius_per_stack": 12,    # px/层
+        "tick_interval": 0.5,      # s 每 tick 一次伤害+减速判定
+        "base_damage": 2,          # 伤害/tick（控制武器，不参与暴击）
+        "damage_per_stack": 1,     # 伤害/层
+        "slow_base": 0.20,         # 基础减速 20%
+        "slow_per_stack": 0.15,    # +/层（第 N 层总减速 = 0.20 + 0.15×(N−1)）
+        "slow_max": 0.65,          # 减速上限 65%
+    },
+    # 圣焰喷射器（C02 §1.3：短程锥形喷吐 + 燃烧，可暴击）
+    "flame": {
+        "base_interval": 0.28,     # s 喷吐间隔
+        "interval_reduction": 0.02,# s/层
+        "min_interval": 0.18,      # s 5 层达下限
+        "base_damage": 2,          # 伤害/tick（直接伤害，可暴击）
+        "damage_per_stack": 0.6,   # 伤害/层
+        "burn_damage": 1,          # 伤害/燃烧tick（不可暴击）
+        "burn_duration": 2.0,      # s 燃烧总时长（4 跳）
+        "burn_tick": 0.5,          # s 燃烧 tick 间隔
+        "cone_length": 170,        # px
+        "cone_half_angle": 30,     # 度 全锥角 60°
     },
 }

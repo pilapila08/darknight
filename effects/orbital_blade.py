@@ -2,6 +2,7 @@ import math
 import pygame
 
 from settings import CYAN, PURPLE, SKILL_DEFS
+from effects.fx_textures import get_nova_ring
 
 _NOVA = SKILL_DEFS["nova"]
 
@@ -59,6 +60,18 @@ class OrbitalBladeManager:
             progress = min(1.0, pulse["age"] / pulse["duration"])
             radius = max(1, int(pulse["radius"] * progress))
             alpha = int(180 * (1 - progress))
+            pos = camera.apply(pygame.Rect(pulse["x"], pulse["y"], 0, 0))
+
+            # C02 FX（fx-spec-v1.md §3）：优先 blit 环形贴图（冲击波感更明显）
+            fx = get_nova_ring()
+            if fx is not None:
+                size = max(4, radius * 2 + 8)
+                surf = pygame.transform.scale(fx, (size, size))
+                surf.set_alpha(alpha)
+                screen.blit(surf, (pos.x - size // 2, pos.y - size // 2))
+                continue
+
+            # 回退：程序化三层圆（原实现）
             size = radius * 2 + 8
             surf = pygame.Surface((size, size), pygame.SRCALPHA)
             center = size // 2
@@ -66,7 +79,6 @@ class OrbitalBladeManager:
             pygame.draw.circle(surf, (*CYAN, alpha), (center, center), radius, 3)
             pygame.draw.circle(surf, (235, 220, 255, min(255, alpha + 40)),
                                (center, center), max(1, int(radius * 0.55)), 2)
-            pos = camera.apply(pygame.Rect(pulse["x"], pulse["y"], 0, 0))
             screen.blit(surf, (pos.x - center, pos.y - center))
 
         cooldown = max(0.0, self.cooldown_timer)

@@ -3,6 +3,7 @@ import random
 import pygame
 from settings import (LIGHTNING_COOLDOWN, LIGHTNING_CHAIN_RANGE,
                       LIGHTNING_DECAY, LIGHTNING_COLOR, CYAN)
+from effects.fx_textures import get_lightning_bolt
 
 
 class LightningBolt:
@@ -24,7 +25,24 @@ class LightningBolt:
         alpha = int(200 * (1 - self.elapsed / self.lifetime))
         p1 = camera.apply(pygame.Rect(self.start[0], self.start[1], 0, 0))
         p2 = camera.apply(pygame.Rect(self.end[0], self.end[1], 0, 0))
-        # Draw a jagged line between p1 and p2
+
+        # C02 FX（fx-spec-v1.md §4）：单段纹理旋转+缩放 blit，保留随机抖动感
+        fx = get_lightning_bolt()
+        if fx is not None:
+            dx, dy = p2.x - p1.x, p2.y - p1.y
+            seg_len = math.hypot(dx, dy)
+            if seg_len > 2:
+                angle = math.degrees(math.atan2(dy, dx)) - 90  # 贴图竖直（96×256）
+                surf = pygame.transform.rotozoom(fx, angle, max(0.05, seg_len / 256.0))
+                surf.set_alpha(alpha)
+                # 沿段方向加一点抖动偏移，保留闪电感
+                jx = random.uniform(-4, 4)
+                jy = random.uniform(-4, 4)
+                screen.blit(surf, (p1.x - surf.get_width() // 2 + jx,
+                                   p1.y - surf.get_height() // 2 + jy))
+            return
+
+        # 回退：程序化折线（原实现）
         points = [(p1.x, p1.y)]
         segments = 3
         for i in range(1, segments):
@@ -34,10 +52,10 @@ class LightningBolt:
             points.append((px, py))
         points.append((p2.x, p2.y))
         if len(points) >= 2:
-            fx = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-            pygame.draw.lines(fx, (*CYAN, max(35, alpha // 2)), False, points, 6)
-            pygame.draw.lines(fx, (210, 245, 255, alpha), False, points, 2)
-            screen.blit(fx, (0, 0))
+            fx_surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            pygame.draw.lines(fx_surf, (*CYAN, max(35, alpha // 2)), False, points, 6)
+            pygame.draw.lines(fx_surf, (210, 245, 255, alpha), False, points, 2)
+            screen.blit(fx_surf, (0, 0))
 
 
 class ChainLightning:

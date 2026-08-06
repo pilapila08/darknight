@@ -24,6 +24,8 @@ from settings import (
     BOSS_1_TIME, BOSS_2_TIME, BOSS_3_TIME, BOSS_4_TIME,
     ENEMY_BULLET_SPEED,
     BOSS_RING_SCALE, ENEMY_RING_ALPHA,
+    CORPSE_KING_CHARGE_TELEGRAPH, CORPSE_KING_ENRAGE_THRESHOLD,
+    CORPSE_KING_ENRAGE_MINION_COUNT, SHADOW_MAGE_TELEPORT_TELEGRAPH,
 )
 from .enemy import Enemy
 
@@ -251,8 +253,39 @@ class CorpseKing(Boss):
         self.charge_speed = CORPSE_KING_SPEED * 3
         self.summon_timer = 0.0
         self.summon_interval = 5.0
+        # R7 P0 (C02 §4.1 C1/C2)
+        self._telegraph_timer = 0.0          # 冲锋前摇
+        self._telegraph_target = None        # 冲锋落点
+        self.enraged = False                 # <50% 狂暴
+
+    def _begin_charge_telegraph(self, player_rect):
+        """C1 冲锋蓄力提示：0.3s 前摇，落点黄圈收缩（让冲锋从偷袭变为可读威胁）。"""
+        self._telegraph_target = (player_rect.centerx, player_rect.centery)
+        self._telegraph_timer = CORPSE_KING_CHARGE_TELEGRAPH
+
+    def _summon_attacks(self):
+        """C2 狂暴：<50% 召唤 3→5 且升级为「基础+冲锋混合」。"""
+        attacks = []
+        if self.enraged:
+            attacks.append({"type": "summon", "enemy_type": "basic", "count": CORPSE_KING_ENRAGE_MINION_COUNT - 1,
+                            "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
+            attacks.append({"type": "summon", "enemy_type": "charger", "count": 1,
+                            "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
+        else:
+            attacks.append({"type": "summon", "enemy_type": "basic", "count": CORPSE_KING_MINION_COUNT,
+                            "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
+        return attacks
 
     def _do_movement(self, dt, player_rect):
+        # C1 冲锋蓄力期：原地不动，只播前摇（计时在 _do_attacks 驱动的 _telegraph_timer 上）
+        if self._telegraph_timer > 0:
+            self._telegraph_timer -= dt
+            if self._telegraph_timer <= 0:
+                self.charging = True
+                self.speed = self.charge_speed
+                self.charge_target = self._telegraph_target
+                self._telegraph_target = None
+            return []
         if self.charging:
             dx = self.charge_target[0] - self.rect.centerx
             dy = self.charge_target[1] - self.rect.centery
@@ -273,22 +306,36 @@ class CorpseKing(Boss):
         attacks = []
         self.summon_timer += dt
 
-        if self.attack_timer >= self.config["attack_interval"] and not self.charging:
+        # C2 狂暴：<50% 触发一次（召唤 3→5 + 混合 + 横幅/duck 由游戏层处理 boss_enrage 事件）
+        hp_ratio = self.hp / self.max_hp
+        if hp_ratio < CORPSE_KING_ENRAGE_THRESHOLD and not self.enraged:
+            self.enraged = True
+            attacks.append({"type": "boss_enrage", "name": self.config["name"]})
+
+        if self.attack_timer >= self.config["attack_interval"] and not self.charging and self._telegraph_timer <= 0:
             self.attack_timer = 0.0
             if random.random() < 0.6:
-                self.charging = True
-                self.speed = self.charge_speed
-                self.charge_target = (player_rect.centerx, player_rect.centery)
+                self._begin_charge_telegraph(player_rect)
+                # 前摇震动提示
+                attacks.append({"type": "telegraph_shake"})
             else:
-                attacks.append({"type": "summon", "enemy_type": "basic", "count": CORPSE_KING_MINION_COUNT,
-                                "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
+                attacks.extend(self._summon_attacks())
 
-        if self.summon_timer >= self.summon_interval and not self.charging:
+        if self.summon_timer >= self.summon_interval and not self.charging and self._telegraph_timer <= 0:
             self.summon_timer = 0.0
-            attacks.append({"type": "summon", "enemy_type": "basic", "count": CORPSE_KING_MINION_COUNT,
-                            "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
+            attacks.extend(self._summon_attacks())
 
         return attacks
+
+    def draw(self, screen, camera):
+        super().draw(screen, camera)
+        # C1 冲锋落点黄圈收缩提示（蓄力期可见）
+        if self._telegraph_timer > 0 and self._telegraph_target:
+            pos = camera.apply(pygame.Rect(self._telegraph_target[0], self._telegraph_target[1], 0, 0))
+            t = max(0.0, self._telegraph_timer / CORPSE_KING_CHARGE_TELEGRAPH)  # 1→0
+            r = int(30 * (0.5 + 0.5 * t))
+            pygame.draw.circle(screen, (255, 200, 50), (pos.x, pos.y), r, 2)
+            pygame.draw.circle(screen, (255, 220, 120), (pos.x, pos.y), max(4, r - 4), 1)
 
 
 class ShadowMage(Boss):
@@ -305,19 +352,37 @@ class ShadowMage(Boss):
         self.teleport_timer = 0.0
         self.summon_timer = 0.0
         self.summon_interval = 6.0
+        # R7 P0 (C02 §4.1 S1)
+        self._teleport_telegraph = 0.0     # 传送落点提示期
+        self._teleport_target = None       # 落点
 
     def _do_movement(self, dt, player_rect):
         self.teleport_timer += dt
         if self.teleport_timer >= SHADOW_MAGE_TELEPORT_INTERVAL:
             self.teleport_timer = 0.0
-            angle = random.uniform(0, math.pi * 2)
-            dist = random.randint(200, 400)
-            self.rect.centerx = int(player_rect.centerx + math.cos(angle) * dist)
-            self.rect.centery = int(player_rect.centery + math.sin(angle) * dist)
-            self.rect.centerx = max(50, min(MAP_WIDTH - 50, self.rect.centerx))
-            self.rect.centery = max(50, min(MAP_HEIGHT - 50, self.rect.centery))
-        else:
-            self._move_toward(player_rect.centerx, player_rect.centery, dt)
+            if self._teleport_telegraph <= 0:
+                # S1 开始传送蓄力：先选落点并提示（0.4s），提示期不动
+                angle = random.uniform(0, math.pi * 2)
+                dist = random.randint(200, 400)
+                tx = int(player_rect.centerx + math.cos(angle) * dist)
+                ty = int(player_rect.centery + math.sin(angle) * dist)
+                tx = max(50, min(MAP_WIDTH - 50, tx))
+                ty = max(50, min(MAP_HEIGHT - 50, ty))
+                self._teleport_target = (tx, ty)
+                self._teleport_telegraph = SHADOW_MAGE_TELEPORT_TELEGRAPH
+                return [{"type": "teleport_telegraph_shake"}]
+
+        if self._teleport_telegraph > 0:
+            self._teleport_telegraph -= dt
+            if self._teleport_telegraph <= 0 and self._teleport_target:
+                self.rect.centerx = self._teleport_target[0]
+                self.rect.centery = self._teleport_target[1]
+                self._teleport_target = None
+                return [{"type": "teleport_land_shake"}]
+            return []
+
+        self._move_toward(player_rect.centerx, player_rect.centery, dt)
+        return []
 
     def _do_attacks(self, dt, player_rect):
         attacks = []
@@ -335,7 +400,8 @@ class ShadowMage(Boss):
                 ty = self.rect.centery + math.sin(a) * 400
                 attacks.append({"type": "projectile", "x": self.rect.centerx, "y": self.rect.centery,
                                 "tx": tx, "ty": ty, "speed": 300, "damage": SHADOW_MAGE_BOLT_DAMAGE,
-                                "color": (150, 50, 220), "radius": 5})
+                                "color": (150, 50, 220), "radius": 5,
+                                "trail": (150, 50, 220)})  # S2 弹幕尾迹
 
         if self.summon_timer >= self.summon_interval:
             self.summon_timer = 0.0
@@ -343,6 +409,18 @@ class ShadowMage(Boss):
                             "x": self.rect.centerx, "y": self.rect.centery, "tier": 0})
 
         return attacks
+
+    def draw(self, screen, camera):
+        super().draw(screen, camera)
+        # S1 传送落点提示：紫色残影圈（提示期可见）
+        if self._teleport_telegraph > 0 and self._teleport_target:
+            pos = camera.apply(pygame.Rect(self._teleport_target[0], self._teleport_target[1], 0, 0))
+            r = 26
+            surf = pygame.Surface((r * 2 + 8, r * 2 + 8), pygame.SRCALPHA)
+            c = r + 4
+            pygame.draw.circle(surf, (140, 40, 220, 70), (c, c), r)
+            pygame.draw.circle(surf, (200, 120, 255, 150), (c, c), r, 2)
+            screen.blit(surf, (pos.x - c, pos.y - c))
 
 
 class IronColossus(Boss):

@@ -102,6 +102,23 @@ def draw_skill_icon_shape(screen, x, y, size, icon_info):
             pygame.draw.line(screen, color, (end_x, end_y), (ex1, ey1), 1)
             pygame.draw.line(screen, color, (end_x, end_y), (ex2, ey2), 1)
 
+    elif shape == "flame":
+        # 圣焰喷射器：锥形喷吐（外焰三角 + 内焰尖 + 底部热核）
+        pygame.draw.polygon(screen, color, [
+            (cx - size // 3, y + size - 8),
+            (cx - size // 6, cy),
+            (cx, y + 4),
+            (cx + size // 6, cy),
+            (cx + size // 3, y + size - 8),
+        ])
+        inner = (min(255, color[0] + 80), min(255, color[1] + 80), min(255, color[2] + 80))
+        pygame.draw.polygon(screen, inner, [
+            (cx - size // 6, y + size - 10),
+            (cx, cy + size // 4),
+            (cx + size // 6, y + size - 10),
+        ])
+        pygame.draw.circle(screen, inner, (cx, y + size - 6), max(2, size // 10))
+
     elif shape == "crit":
         points = []
         for i in range(5):
@@ -228,5 +245,13 @@ SKILL_ICONS = {
     "死亡回响": {
         "color": (255, 90, 90), "glow": (255, 160, 130),
         "shape": "crit", "border": (200, 60, 60),
+    },
+    "凛冬之环": {
+        "color": (120, 200, 255), "glow": (190, 235, 255),
+        "shape": "snowflake", "border": (80, 150, 220),
+    },
+    "圣焰喷射器": {
+        "color": (255, 140, 50), "glow": (255, 200, 110),
+        "shape": "flame", "border": (200, 100, 30),
     },
 }
