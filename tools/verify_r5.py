@@ -280,7 +280,8 @@ def v_r3_no_regression():
     for _ in range(30):
         sk = get_random_skills(3, GameState().stats)
         assert len({s["name"] for s in sk}) == 3
-    assert len(SKILL_POOL) == 14
+    # C02：技能池 14→16（content-pack-v2.md §1.4，新增 凛冬之环/圣焰喷射器）
+    assert len(SKILL_POOL) == 16
 
 
 # ---------- UI：角色选择层可绘制 ----------
@@ -321,7 +322,7 @@ checks = [
     ("R5 meta 写入 + 解锁持久化", v_meta_write),
     ("R5 四角色结算 victories/runs 记录", v_run_result_victory_per_character),
     ("R5 save_meta 增量写", v_save_meta_incremental),
-    ("R5 回归·R3 行为不破坏（池14/三选一）", v_r3_no_regression),
+    ("R5 回归·R3 行为不破坏（池16/三选一）", v_r3_no_regression),
     ("R5 角色选择 UI 绘制与输入", v_character_select_draw),
 ]
 

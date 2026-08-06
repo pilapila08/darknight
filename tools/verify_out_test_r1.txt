@@ -1,0 +1,24 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+DN-ENG-TEST-R1/R2 测试模式重构 + 沙盒化验收
+==============================================
+[OK]   结构回归：无延迟 import / 无散落敌种表 / 7 敌种表
+[OK]   布局单一入口：7 敌种 / 4 Boss+清屏 / 16 技能 / R2 沙盒按钮无重叠
+[OK]   ① 敌种快速生成 7 种可 spawn（含 wraith/warlock）
+[OK]   ①b 面板点击快速生成 7 种
+[OK]   ② 自定义敌人 7 类型可生成，数值生效
+[OK]   ②b 自定义敌种选择 + 生成按钮（点击路径）
+[OK]   ③ 4 Boss + 独立清屏按钮（双组/保留 Boss）
+[OK]   ④ 自动生成开关状态单一源同步
+[OK]   ⑤ 技能面板点击 16 技能不崩（含 frost/flame）
+[OK]   ⑥ 输入框 TEXTINPUT 收集 + Backspace/ESC/外部取消
+[OK]   ⑦ 测试面板渲染多状态不崩
+[OK]   ⑦b 全帧渲染不崩（含武器/Boss 预警）
+[OK]   保留功能：玩家控制 -/+/应用/满血/加经验
+[OK]   SMK-新1 升级开关默认关：击杀不触发升级弹窗
+[OK]   SMK-新2 开启升级开关后升级路径恢复
+[OK]   SMK-新2b 升级开关按钮点击切换
+[OK]   SMK-新3 重置按钮 → _restart 状态归零
+[OK]   SMK-新3b 重置后游戏可继续（update/render 不崩）
+
+TEST_MODE_REFACTOR_ALL_PASS

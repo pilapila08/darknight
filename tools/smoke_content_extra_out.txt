@@ -1,0 +1,15 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   SMK-20 凛冬之环 游戏内减速/恢复/tick伤害
+[OK]   SMK-21 圣焰喷射器 直接伤+燃烧DoT结算+燃烧结束
+[OK]   SMK-22 怨灵 闪现状态机全周期
+[OK]   SMK-23 唤魔师 主从绑定消散无奖励
+[OK]   SMK-24 尸王狂暴 游戏内触发+召唤3→5
+[OK]   SMK-25 FX贴图 加载成功+缺失回退
+[OK]   SMK-26 技能池16 三选一不重复+新武器+升级生效
+[OK]   SMK-27 Boss降临 粒子+白闪+顿帧冻结
+[OK]   SMK-28 暗影巫师 传送+弹幕尾迹
+[OK]   SMK-29 组合回归总闸 frost+flame 5s模拟
+[OK]   SMK-30 BUG-001 四Boss攻击经游戏循环送达
+
+SMOKE_CONTENT_EXTRA_ALL_PASS

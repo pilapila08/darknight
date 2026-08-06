@@ -1,0 +1,25 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   C02 技能池 16 + 三选一不重复
+[OK]   C02 凛冬之环 数值权威表（1/3次 100/124, 2/4, 20%/50%）
+[OK]   C02 圣焰喷射器 数值权威表（1/5次, 封底0.18）
+[OK]   C02 凛冬之环 减速生效/离开恢复/tick伤害
+[OK]   C02 圣焰喷射器 仅锥内受伤 + 燃烧DoT
+[OK]   C02 圣焰喷射器 暴击触发
+[OK]   C02 新武器 desc 非空
+[OK]   C02 怨灵 闪现→提示→落地停顿
+[OK]   C02 唤魔师 召唤+追踪弹事件
+[OK]   C02 追踪弹 homing 弯曲追踪
+[OK]   C02 主从绑定 仆从2s无奖励消散
+[OK]   C02 Boss战不刷唤魔师 / 非Boss战可出
+[OK]   R7 Boss降临入场（震动+粒子+白闪+顿帧）
+[OK]   R7 尸王狂暴 召唤3→5混合 + 事件
+[OK]   R7 尸王冲锋蓄力提示
+[OK]   R7 暗影巫师传送落点提示 + 落地
+[OK]   R7 暗影巫师弹幕尾迹标记
+[OK]   R7 Boss血条 阶段刻度/低血脉动/狂暴横幅
+[OK]   FX 4类贴图资源可加载
+[OK]   FX 4类贴图 draw 路径不报错
+[OK]   回归 R3 新星/闪电/地雷不回归
+
+CONTENT_VERIFY_ALL_PASS

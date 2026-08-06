@@ -1,0 +1,23 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+--- 各图环境光新值（QOL 调亮） ---
+  0 荒芜墓地: (160, 168, 182)  avg=170
+  1 腐化沼泽: (152, 172, 150)  avg=158
+  2 暗影庭院: (160, 146, 184)  avg=163
+  3 钢铁废墟: (176, 162, 148)  avg=162
+  4 虚空裂缝: (148, 140, 168)  avg=152
+[OK]   QOL 环境光调亮 + 色调差异保留
+[OK]   QOL 光照渲染冒烟
+--- 音效时长抽查（采样率对齐后应≈设计时长） ---
+  _shoot: 0.070s
+  _hit_variants: 0.060s
+  _hit_variants: 0.060s
+  _hit_variants: 0.060s
+  _explosion: 0.500s
+  _pickup: 0.110s
+  _ui_click: 0.070s
+  SAMPLE_RATE = 22050
+[OK]   QOL 音效合成时长抽查
+[OK]   QOL 音效可播放
+
+VERIFY_ALL_PASS

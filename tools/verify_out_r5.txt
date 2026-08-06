@@ -1,0 +1,17 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   R5 四角色定义齐全
+[OK]   R5 解锁条件判定（火枪手/坦克/游侠）
+[OK]   R5 初始数值覆盖生效（火枪手/坦克/游侠）
+[OK]   R5 Player 同步 speed/max_hp
+[OK]   R5 被动·火药专家 火力增强×1.5
+[OK]   R5 被动·钢铁壁垒 0.9×0.97/层
+[OK]   R5 被动·疾风连射×0.78 + 灵动+3%/层
+[OK]   R5 旧存档兼容读取（仅 high_score）
+[OK]   R5 meta 写入 + 解锁持久化
+[OK]   R5 四角色结算 victories/runs 记录
+[OK]   R5 save_meta 增量写
+[OK]   R5 回归·R3 行为不破坏（池16/三选一）
+[OK]   R5 角色选择 UI 绘制与输入
+
+VERIFY_ALL_PASS

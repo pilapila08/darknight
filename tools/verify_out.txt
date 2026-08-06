@@ -1,0 +1,23 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   R3 新星首取 12/3.8/150
+[OK]   R3 新星二取 15/3.55/162
+[OK]   R3 新星冷却下限 2.2
+[OK]   R3 闪电首取 5跳/7伤
+[OK]   R3 闪电二取 6跳/8伤
+[OK]   R3 地雷首取 4伤/2.0s/×1.0
+[OK]   R3 地雷二取 4.5伤/1.9s/×1.05
+[OK]   R3 弹量第4发起×0.55
+[OK]   R3 穿透弹 穿透+1/×0.85/弹速1.5
+[OK]   R3 穿透弹 3层封顶移出池
+[OK]   R3 静电过载 未拥有新星→获得+1层
+[OK]   R3 静电过载 已有新星→联动层+1
+[OK]   R3 死亡回响 层数+1
+[OK]   R3 三选一不重复（池16回归）
+[OK]   R3 state 基础值引用 settings
+[OK]   R3 死常量删除
+[OK]   R3 TRAP 唯一源
+[OK]   R4 难度常量
+[OK]   R4 tf_cap 公式
+
+VERIFY_ALL_PASS

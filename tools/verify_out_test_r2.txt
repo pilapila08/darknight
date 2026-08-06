@@ -1,0 +1,143 @@
+############################################################
+# DN-ENG-TEST-R2 全量回归
+############################################################
+
+===== _smoke_test.py :: _smoke_test.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   effects/juice
+[OK]   systems/lighting
+[OK]   systems/camera
+[OK]   ui/drawables get_font
+[OK]   systems/audio_manager
+[OK]   ui/hud
+[OK]   ui/skill_select
+[OK]   ui/boss_hud
+[OK]   ui/game_over
+[OK]   ui/start_screen
+[OK]   r5/character_select
+[OK]   game/normal_game 10帧模拟
+[OK]   entities/walk_anim L1程序动画
+
+SMOKE_ALL_PASS
+exit=0
+
+===== verify_content.py :: tools/verify_content.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   C02 技能池 16 + 三选一不重复
+[OK]   C02 凛冬之环 数值权威表（1/3次 100/124, 2/4, 20%/50%）
+[OK]   C02 圣焰喷射器 数值权威表（1/5次, 封底0.18）
+[OK]   C02 凛冬之环 减速生效/离开恢复/tick伤害
+[OK]   C02 圣焰喷射器 仅锥内受伤 + 燃烧DoT
+[OK]   C02 圣焰喷射器 暴击触发
+[OK]   C02 新武器 desc 非空
+[OK]   C02 怨灵 闪现→提示→落地停顿
+[OK]   C02 唤魔师 召唤+追踪弹事件
+[OK]   C02 追踪弹 homing 弯曲追踪
+[OK]   C02 主从绑定 仆从2s无奖励消散
+[OK]   C02 Boss战不刷唤魔师 / 非Boss战可出
+[OK]   R7 Boss降临入场（震动+粒子+白闪+顿帧）
+[OK]   R7 尸王狂暴 召唤3→5混合 + 事件
+[OK]   R7 尸王冲锋蓄力提示
+[OK]   R7 暗影巫师传送落点提示 + 落地
+[OK]   R7 暗影巫师弹幕尾迹标记
+[OK]   R7 Boss血条 阶段刻度/低血脉动/狂暴横幅
+[OK]   FX 4类贴图资源可加载
+[OK]   FX 4类贴图 draw 路径不报错
+[OK]   回归 R3 新星/闪电/地雷不回归
+
+CONTENT_VERIFY_ALL_PASS
+exit=0
+
+===== verify_r3.py :: tools/verify_r3.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   R3 新星首取 12/3.8/150
+[OK]   R3 新星二取 15/3.55/162
+[OK]   R3 新星冷却下限 2.2
+[OK]   R3 闪电首取 5跳/7伤
+[OK]   R3 闪电二取 6跳/8伤
+[OK]   R3 地雷首取 4伤/2.0s/×1.0
+[OK]   R3 地雷二取 4.5伤/1.9s/×1.05
+[OK]   R3 弹量第4发起×0.55
+[OK]   R3 穿透弹 穿透+1/×0.85/弹速1.5
+[OK]   R3 穿透弹 3层封顶移出池
+[OK]   R3 静电过载 未拥有新星→获得+1层
+[OK]   R3 静电过载 已有新星→联动层+1
+[OK]   R3 死亡回响 层数+1
+[OK]   R3 三选一不重复（池16回归）
+[OK]   R3 state 基础值引用 settings
+[OK]   R3 死常量删除
+[OK]   R3 TRAP 唯一源
+[OK]   R4 难度常量
+[OK]   R4 tf_cap 公式
+
+VERIFY_ALL_PASS
+exit=0
+
+===== verify_r5.py :: tools/verify_r5.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   R5 四角色定义齐全
+[OK]   R5 解锁条件判定（火枪手/坦克/游侠）
+[OK]   R5 初始数值覆盖生效（火枪手/坦克/游侠）
+[OK]   R5 Player 同步 speed/max_hp
+[OK]   R5 被动·火药专家 火力增强×1.5
+[OK]   R5 被动·钢铁壁垒 0.9×0.97/层
+[OK]   R5 被动·疾风连射×0.78 + 灵动+3%/层
+[OK]   R5 旧存档兼容读取（仅 high_score）
+[OK]   R5 meta 写入 + 解锁持久化
+[OK]   R5 四角色结算 victories/runs 记录
+[OK]   R5 save_meta 增量写
+[OK]   R5 回归·R3 行为不破坏（池16/三选一）
+[OK]   R5 角色选择 UI 绘制与输入
+
+VERIFY_ALL_PASS
+exit=0
+
+===== verify_fix_bug001.py :: tools/verify_fix_bug001.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+BUG-001 修复验收（DN-ENG-FIX-BUG001）
+==============================================
+[OK]   BUG-001 源码事实：enemies 更新循环排除 Boss
+[OK]   BUG-001 绘制无重复（Boss 双组不重绘）
+  CorpseKing: 500帧 送达 5 条攻击（阈值 ≥3）
+  ShadowMage: 120帧 送达 5 条攻击（阈值 ≥1）
+  IronColossus: 120帧 送达 1 条攻击（阈值 ≥1）
+  VoidLord: 120帧 送达 3 条攻击（阈值 ≥1）
+[OK]   BUG-001 四 Boss 攻击计数经游戏循环送达
+[OK]   BUG-001 Boss 移动/动画/受击闪白正常
+
+BUG001_FIX_ALL_PASS
+exit=0
+
+===== verify_test_mode.py :: tools/verify_test_mode.py =====
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+DN-ENG-TEST-R1/R2 测试模式重构 + 沙盒化验收
+==============================================
+[OK]   结构回归：无延迟 import / 无散落敌种表 / 7 敌种表
+[OK]   布局单一入口：7 敌种 / 4 Boss+清屏 / 16 技能 / R2 沙盒按钮无重叠
+[OK]   ① 敌种快速生成 7 种可 spawn（含 wraith/warlock）
+[OK]   ①b 面板点击快速生成 7 种
+[OK]   ② 自定义敌人 7 类型可生成，数值生效
+[OK]   ②b 自定义敌种选择 + 生成按钮（点击路径）
+[OK]   ③ 4 Boss + 独立清屏按钮（双组/保留 Boss）
+[OK]   ④ 自动生成开关状态单一源同步
+[OK]   ⑤ 技能面板点击 16 技能不崩（含 frost/flame）
+[OK]   ⑥ 输入框 TEXTINPUT 收集 + Backspace/ESC/外部取消
+[OK]   ⑦ 测试面板渲染多状态不崩
+[OK]   ⑦b 全帧渲染不崩（含武器/Boss 预警）
+[OK]   保留功能：玩家控制 -/+/应用/满血/加经验
+[OK]   SMK-新1 升级开关默认关：击杀不触发升级弹窗
+[OK]   SMK-新2 开启升级开关后升级路径恢复
+[OK]   SMK-新2b 升级开关按钮点击切换
+[OK]   SMK-新3 重置按钮 → _restart 状态归零
+[OK]   SMK-新3b 重置后游戏可继续（update/render 不崩）
+
+TEST_MODE_REFACTOR_ALL_PASS
+exit=0
+
+DONE

@@ -1,0 +1,17 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[OK]   effects/juice
+[OK]   systems/lighting
+[OK]   systems/camera
+[OK]   ui/drawables get_font
+[OK]   systems/audio_manager
+[OK]   ui/hud
+[OK]   ui/skill_select
+[OK]   ui/boss_hud
+[OK]   ui/game_over
+[OK]   ui/start_screen
+[OK]   r5/character_select
+[OK]   game/normal_game 10Ö¡Ä£Äâ
+[OK]   entities/walk_anim L1³ÌÐò¶¯»­
+
+SMOKE_ALL_PASS

@@ -1,0 +1,14 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+BUG-001 修复验收（DN-ENG-FIX-BUG001）
+==============================================
+[OK]   BUG-001 源码事实：enemies 更新循环排除 Boss
+[OK]   BUG-001 绘制无重复（Boss 双组不重绘）
+  CorpseKing: 500帧 送达 5 条攻击（阈值 ≥3）
+  ShadowMage: 120帧 送达 5 条攻击（阈值 ≥1）
+  IronColossus: 120帧 送达 1 条攻击（阈值 ≥1）
+  VoidLord: 120帧 送达 3 条攻击（阈值 ≥1）
+[OK]   BUG-001 四 Boss 攻击计数经游戏循环送达
+[OK]   BUG-001 Boss 移动/动画/受击闪白正常
+
+BUG001_FIX_ALL_PASS

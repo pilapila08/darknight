@@ -190,7 +190,8 @@ def v_random_no_dup():
         skills = get_random_skills(3, fresh_stats())
         names = [s["name"] for s in skills]
         assert len(set(names)) == len(names), names
-    assert len(SKILL_POOL) == 14, len(SKILL_POOL)
+    # C02：技能池 14→16（content-pack-v2.md §1.4，新增 凛冬之环/圣焰喷射器）
+    assert len(SKILL_POOL) == 16, len(SKILL_POOL)
 
 
 # --- R3: state 基础值引用 settings ---
@@ -255,7 +256,7 @@ checks = [
     ("R3 静电过载 未拥有新星→获得+1层", v_static_overload_grants_nova),
     ("R3 静电过载 已有新星→联动层+1", v_static_overload_with_nova),
     ("R3 死亡回响 层数+1", v_death_echo),
-    ("R3 三选一不重复（池14回归）", v_random_no_dup),
+    ("R3 三选一不重复（池16回归）", v_random_no_dup),
     ("R3 state 基础值引用 settings", v_state_defaults),
     ("R3 死常量删除", v_dead_constants_removed),
     ("R3 TRAP 唯一源", v_trap_unique_source),

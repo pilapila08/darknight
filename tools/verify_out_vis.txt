@@ -1,0 +1,20 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+  settings 参数在位： (255, 200, 80) 2 70 (255, 80, 60) 55 1.6
+[OK]   settings 参数在位
+--- 轮廓光缓存（按类型/尺寸/帧，150 敌人共享） ---
+  20 只普通怪后缓存 0→3（共享生效）
+  全部类型后缓存 27（含 Boss 4 型）
+  轮廓光尺寸/暖色校验通过（帧 28x28 → glow 34x34）
+[OK]   轮廓光按类型缓存 + 尺寸/暖色校验
+--- 各类型 draw 冒烟（含 flip / 受击闪白 / exploder 光圈 / Boss） ---
+  全部类型 draw 通过（9 只 + 闪白 2 只）
+[OK]   各类型 draw 冒烟（flip/闪白/exploder/Boss）
+--- 自爆怪爆炸范围光圈 ---
+  exploder 范围光圈半径 = 80px（红色脉冲）通过
+[OK]   自爆怪爆炸范围光圈
+--- 150 敌人绘制性能冒烟（参考 L1 动画 0.79ms 预算） ---
+  150 敌人单帧绘制 1.16ms（每敌人 0.008ms）
+[OK]   150 敌人绘制性能冒烟
+
+VERIFY_ALL_PASS
